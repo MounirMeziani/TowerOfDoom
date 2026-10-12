@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* Olsen Tower of Doom — dark-only arcade design tokens */
+:root {
+  --bg: #0b0614;
+  --surface: #150c22;
+  --surface-2: #1f1233;
+  --line: #34224f;
+  --text: #f4eeff;
+  --muted: #a597c2;
+  --ember: #ff6b2c;
+  --ember-2: #ff9a3d;
+  --gold: #ffcf4a;
+  --good: #3ddc97;
+  --bad: #ff4d6d;
+  --giving: #4cc9f0;
+  --receiving: #c77dff;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-ember: var(--ember);
+  --color-ember-2: var(--ember-2);
+  --color-gold: var(--gold);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-giving: var(--giving);
+  --color-receiving: var(--receiving);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-pixel: var(--font-press-start), ui-monospace, monospace;
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+/* Base layer so Tailwind utilities (outline-none, focus-visible:outline-*) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--ember) 45%, transparent);
+    color: var(--text);
+  }
+}
+
+.font-pixel {
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* Animated ember + scanline background. Purely decorative. */
+.doom-bg {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 60% at 50% 110%, color-mix(in oklab, var(--ember) 22%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 50% at 50% -10%, color-mix(in oklab, var(--receiving) 14%, transparent) 0%, transparent 70%),
+    var(--bg);
+}
+
+.doom-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 12% 90%, var(--ember-2) 50%, transparent 51%),
+    radial-gradient(2px 2px at 38% 80%, var(--ember) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 64% 95%, var(--gold) 50%, transparent 51%),
+    radial-gradient(2px 2px at 86% 85%, var(--ember-2) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 24% 70%, var(--ember) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 74% 75%, var(--gold) 50%, transparent 51%);
+  background-size: 100% 100%;
+  opacity: 0.55;
+  animation: doom-embers 9s linear infinite;
+}
+
+.doom-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.025) 0px,
+    rgb(255 255 255 / 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+@keyframes doom-embers {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-70vh);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .doom-bg::before {
+    animation: none;
+    opacity: 0.3;
+  }
+}
+
+@media print {
+  .doom-bg::before,
+  .doom-bg::after {
+    display: none;
+  }
+}

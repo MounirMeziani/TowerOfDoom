@@ -1,0 +1,14 @@
+export const TOTAL_FLOORS = 12;
+export const BOSS_FLOORS = { 6: "receiving", 12: "giving" } as const; // floor number -> boss mode
+export const STARTING_HEARTS = 3;
+export const REGULAR_TIME_LIMIT_MS = 45_000;
+export const BOSS_TIME_LIMIT_MS = 180_000;
+export const POINTS_CORRECT = 100;
+export const STREAK_BONUS_STEP = 25;   // +25 per consecutive correct answer after the first
+export const STREAK_BONUS_CAP = 100;
+export const SPEED_BONUS_MAX = 50;     // linear decay to 0 over SPEED_BONUS_WINDOW_MS
+export const SPEED_BONUS_WINDOW_MS = 30_000;
+export const BOSS_POINTS_PER_A_POINT = 75; // two A's scored 0-2 each -> max 300
+export const BOSS_PASS_BONUS = 100;
+export const VICTORY_BONUS_PER_HEART = 150;
+export const MAX_SCORE = 10 * (POINTS_CORRECT + STREAK_BONUS_CAP + SPEED_BONUS_MAX) + 2 * (4 * BOSS_POINTS_PER_A_POINT + BOSS_PASS_BONUS) + STARTING_HEARTS * VICTORY_BONUS_PER_HEART; // 3750
