@@ -100,11 +100,6 @@ export function FinishedScreen({ state, player, sessionCode, sessionStatus, onPl
           >
             {victory ? "VICTORY!" : "DOOMED!"}
           </motion.h1>
-          <p className="text-base text-text/90">
-            {victory
-              ? "You conquered the Tower of Doom. The feedback villains flee the building."
-              : "The lava claims another hero. Learn from the fall and climb again."}
-          </p>
           <div className="flex items-center gap-2">
             <HeroAvatar heroId={player.heroId} size="sm" />
             <span className="truncate text-sm font-semibold text-muted">{player.name}</span>
@@ -113,57 +108,72 @@ export function FinishedScreen({ state, player, sessionCode, sessionStatus, onPl
       </div>
 
       {nextRoundInLobby && (
-        <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-ember-2 bg-ember/10 p-3 text-center">
-          <p className="font-pixel text-[0.625rem] leading-relaxed text-ember-2 sm:text-xs">The host has opened round 2</p>
-          <p className="text-sm text-text/90">
-            {submit.status === "saving" || submit.status === "waiting"
-              ? "Your run is still being saved. It will finish even if you head to the lobby now."
-              : "Check your result below, then join the lobby to climb again with everyone."}
-          </p>
-          <Button href={lobbyHref} className="w-full text-center sm:w-auto">
-            Join the round 2 lobby
+        <div className="flex justify-center rounded-lg border-2 border-ember-2 bg-ember/10 p-3">
+          <Button href={lobbyHref} className="w-full text-center sm:w-auto" aria-label="Join the round 2 lobby">
+            <span aria-hidden="true">▶</span> Round 2
           </Button>
         </div>
       )}
 
       <dl className="grid grid-cols-2 gap-3">
         <div className="col-span-2 rounded-lg border-2 border-gold/60 bg-gold/5 p-3 text-center">
-          <dt className="text-xs font-semibold tracking-wide text-muted uppercase">Final score</dt>
+          <dt className="sr-only">Final score</dt>
           <dd className="mt-1 font-pixel text-2xl text-gold sm:text-3xl">
             <AnimatedNumber value={state.score} />
           </dd>
           {state.victoryBonus > 0 && (
-            <dd className="mt-1 text-xs text-muted">Includes +{state.victoryBonus} for {state.hearts} heart{state.hearts === 1 ? "" : "s"} left</dd>
+            <dd className="mt-1 font-pixel text-[0.625rem] text-muted">
+              <span className="sr-only">Includes a heart bonus of </span>
+              <span aria-hidden="true">❤ </span>+{state.victoryBonus}
+            </dd>
           )}
         </div>
         {[
-          { label: "Floors cleared", value: `${cleared}/${state.floors.length}` },
-          { label: "Best streak", value: `${state.bestStreak}` },
-          { label: "Hearts left", value: `${state.hearts}` },
-          { label: "Time", value: formatDuration(time) },
+          { icon: "🏢", label: "Floors cleared", value: `${cleared}/${state.floors.length}` },
+          { icon: "🔥", label: "Best streak", value: `${state.bestStreak}` },
+          { icon: "❤", label: "Hearts left", value: `${state.hearts}` },
+          { icon: "⏱", label: "Time", value: formatDuration(time) },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border-2 border-line bg-bg/60 p-3">
-            <dt className="text-xs font-semibold tracking-wide text-muted uppercase">{s.label}</dt>
-            <dd className="mt-1 font-pixel text-sm text-text">{s.value}</dd>
+          <div key={s.label} className="flex items-center gap-3 rounded-lg border-2 border-line bg-bg/60 p-3">
+            <dt>
+              <span aria-hidden="true" className="text-lg">
+                {s.icon}
+              </span>
+              <span className="sr-only">{s.label}</span>
+            </dt>
+            <dd className="font-pixel text-sm text-text">{s.value}</dd>
           </div>
         ))}
       </dl>
 
       <div role="status" aria-live="polite" className="min-h-12 rounded-lg border-2 border-line bg-surface-2 p-3 text-center">
-        {submit.status === "saving" && <p className="text-sm text-muted">Carving your name into the leaderboard...</p>}
-        {submit.status === "waiting" && <p className="text-sm text-muted">Waiting to save... the leaderboard is busy, retrying shortly.</p>}
+        {(submit.status === "saving" || submit.status === "waiting") && (
+          <span aria-label="Saving" className="flex justify-center gap-1.5 py-1">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                aria-hidden="true"
+                className="block size-2.5 animate-pulse rounded-[2px] bg-ember"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
+          </span>
+        )}
         {submit.status === "saved" && (
           <p className="font-pixel text-xs leading-relaxed text-ember-2 sm:text-sm">
-            {submit.rank === null
-              ? "Run recorded!"
-              : sessionCode
-                ? `#${submit.rank} in session ${sessionCode}`
-                : `#${submit.rank} on the global board`}
+            <span aria-hidden="true">🏆 </span>
+            {submit.rank === null ? "✓" : `#${submit.rank}`}
+            <span className="sr-only">
+              {submit.rank === null ? " Run saved" : sessionCode ? ` in session ${sessionCode}` : " on the global board"}
+            </span>
           </p>
         )}
         {submit.status === "error" && (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-bad">Couldn&apos;t save your run: {submit.message}</p>
+            <p className="text-lg text-bad" title={submit.message}>
+              <span aria-hidden="true">⚠</span>
+              <span className="sr-only">{submit.message}</span>
+            </p>
             <Button
               variant="secondary"
               onClick={() => {
@@ -171,15 +181,15 @@ export function FinishedScreen({ state, player, sessionCode, sessionStatus, onPl
                 setAttempt((a) => a + 1);
               }}
             >
-              Retry save
+              Retry
             </Button>
           </div>
         )}
       </div>
 
       <section aria-labelledby="mastery-heading" className="flex flex-col gap-3">
-        <h2 id="mastery-heading" className="font-pixel text-[0.625rem] text-gold sm:text-xs">
-          YOUR MASTERY OF THE 2 A&apos;S
+        <h2 id="mastery-heading" className="sr-only">
+          Your mastery of the 2 A&apos;s
         </h2>
         <ul className="flex flex-col gap-3">
           {A_ORDER.map((a) => {
@@ -193,10 +203,13 @@ export function FinishedScreen({ state, player, sessionCode, sessionStatus, onPl
                   <span className={`font-semibold ${giving ? "text-giving" : "text-receiving"}`}>
                     {A_INFO[a].label}
                     {a === weakest && weakestRatio !== null && weakestRatio < 1 && (
-                      <span className="ml-2 rounded-sm bg-bad/20 px-1.5 py-0.5 text-xs font-semibold text-bad">weakest</span>
+                      <span className="ml-2 rounded-sm bg-bad/20 px-1.5 py-0.5 text-xs font-semibold text-bad">
+                        <span aria-hidden="true">⚠</span>
+                        <span className="sr-only">weakest</span>
+                      </span>
                     )}
                   </span>
-                  <span className="text-muted tabular-nums">{r === null ? "not tested" : `${s.correct}/${s.total} · ${pct}%`}</span>
+                  <span className="text-muted tabular-nums">{r === null ? "–" : `${s.correct}/${s.total}`}</span>
                 </div>
                 <div
                   className="h-3 overflow-hidden rounded-sm border border-line bg-bg"
@@ -218,39 +231,39 @@ export function FinishedScreen({ state, player, sessionCode, sessionStatus, onPl
             );
           })}
         </ul>
-        {weakest && weakestRatio !== null && weakestRatio < 1 ? (
-          <p className="text-base leading-relaxed">
-            Your weakest A is <strong className={A_INFO[weakest].mode === "giving" ? "text-giving" : "text-receiving"}>{A_INFO[weakest].label}</strong>:{" "}
-            {A_INFO[weakest].description}{" "}
-            <Link href={`/learn#${weakest}`} className="font-semibold text-ember-2 underline underline-offset-4 hover:text-ember">
-              Study {A_INFO[weakest].label}
-            </Link>
-          </p>
-        ) : weakest ? (
-          <p className="text-base text-good">Flawless on every A you faced. The 2 A&apos;s are second nature to you.</p>
-        ) : null}
+        {weakest && weakestRatio !== null && weakestRatio < 1 && (
+          <Link
+            href={`/learn#${weakest}`}
+            className="self-start font-semibold text-ember-2 underline underline-offset-4 hover:text-ember"
+            aria-label={`Study ${A_INFO[weakest].label}`}
+          >
+            <span aria-hidden="true">📖 </span>
+            {A_INFO[weakest].label}
+          </Link>
+        )}
       </section>
 
       <div className="flex flex-col gap-3 sm:flex-row">
         {nextRoundInLobby ? (
-          <Button size="lg" href={lobbyHref} className="w-full text-center sm:flex-1">
-            Join the round 2 lobby
+          <Button size="lg" href={lobbyHref} className="w-full text-center sm:flex-1" aria-label="Join the round 2 lobby">
+            <span aria-hidden="true">▶</span> Round 2
           </Button>
         ) : (
           <Button size="lg" onClick={onPlayAgain} className="w-full text-center sm:flex-1">
-            Play again
+            <span aria-hidden="true">↻</span> Again
           </Button>
         )}
-        <Button size="lg" variant="secondary" href={leaderboardHref} className="w-full text-center sm:flex-1">
-          Leaderboard
+        <Button size="lg" variant="secondary" href={leaderboardHref} className="w-full text-center sm:flex-1" aria-label="Leaderboard">
+          <span aria-hidden="true">🏆</span>
         </Button>
         <Button
           size="lg"
           variant="ghost"
           href="/learn"
           className="w-full text-center whitespace-nowrap sm:w-auto sm:flex-none sm:px-4"
+          aria-label="Learn the 2 A's"
         >
-          Learn the 2 A&apos;s
+          <span aria-hidden="true">📖</span>
         </Button>
       </div>
     </Panel>

@@ -9,7 +9,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Leaderboard",
-  description: "Live top scores from the Olsen Tower of Doom, globally or for your workshop session.",
+  description: "Live top scores from the Olsen Tower of Doom.",
 };
 
 async function findSessionName(code: string): Promise<string | null> {
@@ -34,47 +34,53 @@ export default async function LeaderboardPage({
 
   return (
     <PageShell>
-      <div className="flex flex-col gap-6">
-        <header className="flex flex-col gap-2">
-          <p className="font-pixel text-[0.625rem] uppercase text-muted">
-            {sessionCode ? `Session ${sessionCode}` : "Global"}
-          </p>
-          <h1 className="font-pixel text-base leading-relaxed text-text sm:text-xl">
-            {sessionCode ? sessionName : "Hall of Heroes"}
+      <div className="flex flex-col gap-4">
+        <header className="flex flex-wrap items-center gap-3">
+          <h1 className="flex min-w-0 items-center gap-2 font-pixel text-base leading-relaxed text-text sm:text-lg">
+            <span aria-hidden="true">🏆</span>
+            <span className="truncate">{sessionCode ? sessionName : "Leaderboard"}</span>
           </h1>
-          <p className="text-sm text-muted">
-            {sessionCode
-              ? "Best climb per hero in this workshop session. Updates live as runs finish."
-              : "The best climbs in the whole tower, best run per hero. Updates live as runs finish."}
-          </p>
+          {sessionCode && (
+            <span className="rounded border-2 border-gold/50 px-2 py-1 font-pixel text-[0.625rem] text-gold">
+              <span className="sr-only">Session </span>
+              {sessionCode}
+            </span>
+          )}
           {rawCode && !sessionCode && (
-            <p role="status" className="rounded-md border-2 border-gold/50 bg-gold/10 px-3 py-2 text-sm text-gold">
-              No session found for code &ldquo;{rawCode.slice(0, 16)}&rdquo;. Showing the global leaderboard instead.
+            <p
+              role="status"
+              title="Session not found"
+              className="rounded border-2 border-bad/50 bg-bad/10 px-2 py-1 font-pixel text-[0.625rem] text-bad"
+            >
+              <span aria-hidden="true">✗ </span>
+              <span className="sr-only">No session found for code </span>
+              {rawCode.slice(0, 16)}
             </p>
           )}
         </header>
 
         <Panel>
-          <LiveLeaderboard sessionCode={sessionCode} limit={50} variant="compact" />
+          <LiveLeaderboard
+            sessionCode={sessionCode}
+            limit={50}
+            variant="compact"
+            title={sessionCode ? "Session" : "Global"}
+            hideTitle
+          />
         </Panel>
 
         <div className="flex flex-wrap items-center gap-3">
           <Button href="/play" size="lg">
-            Climb the Tower
+            <span aria-hidden="true">▶</span> Play
           </Button>
-          {sessionCode ? (
+          {sessionCode && (
             <Link
               href="/leaderboard"
-              className="flex min-h-11 items-center rounded px-2 text-sm font-medium text-muted underline-offset-4 hover:text-text hover:underline"
+              aria-label="Global leaderboard"
+              title="Global"
+              className="grid size-11 place-items-center rounded text-xl hover:bg-surface-2"
             >
-              View global leaderboard
-            </Link>
-          ) : (
-            <Link
-              href="/learn"
-              className="flex min-h-11 items-center rounded px-2 text-sm font-medium text-muted underline-offset-4 hover:text-text hover:underline"
-            >
-              Brush up on the 2 A&apos;s
+              <span aria-hidden="true">🌐</span>
             </Link>
           )}
         </div>

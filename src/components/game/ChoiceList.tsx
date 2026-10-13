@@ -7,7 +7,7 @@ import type { RegularFloor } from "@/lib/types";
 export function ChoiceList({ floor, onAnswer }: { floor: RegularFloor; onAnswer: (choiceId: string) => void }) {
   const reduce = useReducedMotion();
   return (
-    <ol className="flex flex-col gap-3" aria-label="Choices (press 1 to 4)">
+    <ol className="flex flex-col gap-3 [@media(max-height:500px)]:gap-2" aria-label="Choices (press 1 to 4)">
       {floor.choices.map((c, i) => (
         <motion.li
           key={c.id}
@@ -18,7 +18,7 @@ export function ChoiceList({ floor, onAnswer }: { floor: RegularFloor; onAnswer:
           <button
             type="button"
             onClick={() => onAnswer(c.id)}
-            className="group flex min-h-14 w-full items-start gap-3 rounded-lg border-2 border-line bg-surface-2 p-3 text-left text-base leading-snug text-text shadow-[0_3px_0_0_#0b0614] transition-[border-color,background-color,transform] duration-150 hover:border-ember hover:bg-ember/10 focus-visible:border-ember active:translate-y-px"
+            className="group flex min-h-14 w-full items-start gap-3 rounded-lg border-2 border-line bg-surface-2 p-3 text-left text-base leading-snug text-text shadow-[0_3px_0_0_#0b0614] transition-[border-color,background-color,transform] duration-150 hover:border-ember hover:bg-ember/10 focus-visible:border-ember active:translate-y-px [@media(max-height:500px)]:min-h-11 [@media(max-height:500px)]:py-2 [@media(max-height:500px)]:text-sm [@media(max-height:500px)]:leading-snug"
           >
             <kbd
               aria-hidden="true"

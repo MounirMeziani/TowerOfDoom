@@ -15,11 +15,11 @@ export function PlayFrame({ children, hearts = STARTING_HEARTS }: { children: Re
   );
 }
 
-/** Small centered loader used while the session status loads or while redirecting. */
-export function PlayLoader({ message }: { message: string }) {
+/** Small centered loader used while the session status loads or while redirecting (icon only; message is for screen readers). */
+export function PlayLoader({ message = "Loading" }: { message?: string }) {
   return (
     <PageShell>
-      <div role="status" className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
+      <div role="status" aria-label={message} className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
         <span aria-hidden="true" className="flex gap-1.5">
           {[0, 1, 2].map((i) => (
             <span
@@ -29,7 +29,6 @@ export function PlayLoader({ message }: { message: string }) {
             />
           ))}
         </span>
-        <p className="font-pixel text-[0.625rem] leading-relaxed text-muted sm:text-xs">{message}</p>
       </div>
     </PageShell>
   );

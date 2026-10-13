@@ -13,7 +13,9 @@ export interface LiveLeaderboardProps {
   variant?: LeaderboardVariant;
   /** Heading shown above the list. */
   title?: string;
-  /** Text shown when there are no runs yet (defaults to the "first brave soul" line). */
+  /** Keep the heading for screen readers only (the page already shows a visible title). */
+  hideTitle?: boolean;
+  /** Text shown when there are no runs yet (defaults to "No runs yet"). */
   emptyMessage?: string;
   /**
    * Pre-fetched live data (e.g. from a page that also renders stats from the same runs).
@@ -61,6 +63,7 @@ function LeaderboardView({
   limit = 10,
   variant = "compact",
   title,
+  hideTitle = false,
   emptyMessage,
   className = "",
 }: Omit<LiveLeaderboardProps, "live"> & { live: LiveRuns }) {
@@ -69,12 +72,18 @@ function LeaderboardView({
   const rows = bestRunPerPlayer(live.runs).slice(0, limit);
   const fresh = new Set(live.freshIds);
   const latestFresh = live.runs.find((r) => r.id === live.freshIds[live.freshIds.length - 1]);
-  const heading = title ?? (sessionCode ? "Session leaderboard" : "Hall of Heroes");
+  const heading = title ?? (sessionCode ? "Session" : "Leaderboard");
 
   return (
     <section aria-label={heading} className={`flex min-w-0 flex-col gap-3 ${className}`.trim()}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 className={`font-pixel uppercase text-ember-2 ${projector ? "text-sm xl:text-base" : "text-[0.625rem] sm:text-xs"}`}>
+      <div className={`flex items-center gap-3 ${hideTitle ? "justify-end" : "justify-between"}`}>
+        <h2
+          className={
+            hideTitle
+              ? "sr-only"
+              : `font-pixel uppercase text-ember-2 ${projector ? "text-sm xl:text-base" : "text-[0.625rem] sm:text-xs"}`
+          }
+        >
           {heading}
         </h2>
         <StatusDot status={live.status} />
@@ -98,7 +107,11 @@ function LeaderboardView({
         </ul>
       ) : rows.length === 0 ? (
         <p className="rounded-lg border-2 border-dashed border-line px-4 py-6 text-center text-sm text-muted">
-          {emptyMessage ?? "No climbers yet. The tower awaits its first brave soul."}
+          {emptyMessage ?? (
+            <>
+              <span aria-hidden="true">🗼 </span>No runs yet
+            </>
+          )}
         </p>
       ) : (
         <ol className="flex flex-col gap-2">
@@ -171,38 +184,32 @@ function LeaderboardRow({
 
       <HeroAvatar heroId={run.avatar ?? ""} size={projector ? "md" : "sm"} />
 
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p
-            className={`min-w-0 font-semibold text-text ${
-              projector ? "truncate text-lg xl:text-xl" : "line-clamp-2 text-sm [overflow-wrap:anywhere] sm:text-base"
-            }`}
-          >
-            {run.player_name}
-          </p>
-          {fresh && (
-            <span className="shrink-0 rounded bg-gold px-1.5 py-0.5 font-pixel text-[0.625rem] text-bg">NEW</span>
-          )}
-        </div>
-        <p className={projector ? "font-pixel text-[0.625rem] text-muted" : "font-sans text-xs tabular-nums text-muted"}>
-          F {run.floors_cleared}/{run.total_floors}
-          {victory ? ` · ${"♥".repeat(Math.min(run.hearts_left, 3))}` : ""}
-          {!projector && (
-            <span role="img" aria-label={victory ? "Victory" : "Doomed"} className="sm:hidden">
-              {" · "}
-              {victory ? "👑" : "💀"}
-            </span>
-          )}
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <p
+          className={`min-w-0 font-semibold text-text ${
+            projector ? "truncate text-lg xl:text-xl" : "line-clamp-2 text-sm [overflow-wrap:anywhere] sm:text-base"
+          }`}
+        >
+          {run.player_name}
         </p>
+        {fresh && (
+          <span className="shrink-0 rounded bg-gold px-1.5 py-0.5 font-pixel text-[0.625rem] text-bg">NEW</span>
+        )}
       </div>
 
       <span
-        role="img"
-        aria-label={victory ? "Victory" : "Doomed"}
-        title={victory ? "Victory" : "Doomed"}
-        className={`shrink-0 ${projector ? "text-2xl" : "hidden text-lg sm:inline"}`}
+        className={`flex shrink-0 items-center justify-center gap-1 font-pixel tabular-nums text-muted ${
+          projector ? "w-20 text-xs" : "w-12 text-[0.625rem]"
+        }`}
       >
-        {victory ? "👑" : "💀"}
+        <span role="img" aria-label={victory ? "Victory" : "Doomed"} title={victory ? "Victory" : "Doomed"}>
+          {victory ? "👑" : "💀"}
+        </span>
+        <span>
+          <span className="sr-only">Floor </span>
+          {run.floors_cleared}
+          <span className="sr-only"> of {run.total_floors}</span>
+        </span>
       </span>
 
       <span

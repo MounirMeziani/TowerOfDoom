@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { TowerArt } from "@/components/brand/TowerArt";
-import { Button } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/Button";
 import { PageShell } from "@/components/ui/PageShell";
 
 export const metadata: Metadata = {
-  title: "You fell off the tower",
+  title: "404",
 };
 
 export default function NotFound() {
@@ -14,20 +15,12 @@ export default function NotFound() {
         <div className="w-24 opacity-90 sm:w-32">
           <TowerArt floorsLit={0} />
         </div>
-        <p className="font-pixel text-[0.625rem] text-bad uppercase">404 · Floor not found</p>
-        <h1 className="font-pixel text-base leading-snug text-ember-2 sm:text-xl">You fell off the tower</h1>
-        <p className="max-w-md text-muted">
-          This floor doesn&apos;t exist, or the doom eye swallowed it. Dust yourself off and head back to the
-          lobby doors.
-        </p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button href="/" size="lg">
-            Back to the tower
-          </Button>
-          <Button href="/learn" variant="secondary" size="lg">
-            Learn the 2 A&apos;s
-          </Button>
-        </div>
+        <h1 className="font-pixel text-3xl text-ember-2 sm:text-5xl">
+          404<span className="sr-only"> Page not found</span>
+        </h1>
+        <Link href="/" aria-label="Home" title="Home" className={buttonClasses({ size: "lg", className: "text-xl" })}>
+          <span aria-hidden="true">🏠</span>
+        </Link>
       </div>
     </PageShell>
   );

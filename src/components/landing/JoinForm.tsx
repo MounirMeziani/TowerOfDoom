@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CharacterCreator } from "@/components/character/CharacterCreator";
 import { getPlayer, normalizeSessionCode } from "@/lib/player";
@@ -30,8 +30,6 @@ export function JoinForm() {
 
   const [codeInput, setCodeInput] = useState("");
   const [showCodeField, setShowCodeField] = useState(false);
-  const codeFieldId = useId();
-  const codeHintId = useId();
 
   const typedCode = normalizeSessionCode(codeInput);
   const code = urlCode ?? typedCode;
@@ -43,74 +41,68 @@ export function JoinForm() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3">
-        {urlCode ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="inline-flex min-h-9 items-center gap-2 rounded-full border-2 border-good/60 bg-good/10 px-3 py-1 text-sm text-text">
-              <span aria-hidden="true" className="relative flex size-2.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-good opacity-60 motion-reduce:hidden" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-good" />
-              </span>
-              Joining session <strong className="font-pixel text-xs tracking-widest text-good">{urlCode}</strong>
-            </p>
-            <button
-              type="button"
-              onClick={() => router.replace("/", { scroll: false })}
-              className="min-h-11 rounded px-2 text-sm text-muted underline underline-offset-4 hover:text-text"
-            >
-              Play solo instead
-            </button>
-          </div>
-        ) : showCodeField ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={codeFieldId} className="font-pixel text-[0.625rem] text-muted uppercase">
-              Session code (optional)
-            </label>
-            <input
-              id={codeFieldId}
-              type="text"
-              inputMode="text"
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={12}
-              value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-              placeholder="ABCDE"
-              aria-invalid={typedButInvalid || undefined}
-              aria-describedby={codeHintId}
-              className={`min-h-12 w-full rounded-md border-2 bg-surface-2 px-3 py-2 font-pixel text-sm tracking-[0.3em] text-text uppercase placeholder:text-muted/50 focus-visible:border-ember ${
-                typedButInvalid ? "border-gold" : typedCode ? "border-good" : "border-line"
-              }`}
-            />
-            <p id={codeHintId} className={`text-xs ${typedButInvalid ? "text-gold" : "text-muted"}`} aria-live="polite">
-              {typedButInvalid
-                ? "Codes are 4-8 letters or numbers. Leave it blank to climb solo."
-                : typedCode
-                  ? `You'll join session ${typedCode} and wait in the lobby.`
-                  : "Ask your host for the code on the big screen."}
-            </p>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">
-            At a workshop?{" "}
-            <button
-              type="button"
-              onClick={() => setShowCodeField(true)}
-              className="min-h-11 font-semibold text-gold underline underline-offset-4 hover:text-ember-2"
-            >
-              Enter a session code
-            </button>
+    <div className="flex flex-col gap-4">
+      {urlCode ? (
+        <div className="flex items-center gap-2">
+          <p
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-good/60 bg-good/10 px-3 text-text"
+            aria-label={`Session ${urlCode}`}
+          >
+            <span aria-hidden="true" className="relative flex size-2.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-good opacity-60 motion-reduce:hidden" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-good" />
+            </span>
+            <strong className="font-pixel text-xs tracking-widest text-good">{urlCode}</strong>
           </p>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={() => router.replace("/", { scroll: false })}
+            aria-label="Play solo instead"
+            title="Solo"
+            className="grid size-11 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+      ) : showCodeField ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={12}
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+            placeholder="CODE"
+            aria-label="Session code (optional, 4-8 letters or numbers)"
+            aria-invalid={typedButInvalid || undefined}
+            autoFocus
+            className={`min-h-12 w-full rounded-md border-2 bg-surface-2 px-3 py-2 font-pixel text-sm tracking-[0.3em] text-text uppercase placeholder:text-muted/50 focus-visible:border-ember ${
+              typedButInvalid ? "border-bad" : typedCode ? "border-good" : "border-line"
+            }`}
+          />
+          <span aria-hidden="true" className={`w-8 shrink-0 text-center text-lg ${typedCode ? "text-good" : "text-bad"}`}>
+            {typedCode ? "✓" : typedButInvalid ? "✗" : ""}
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowCodeField(true)}
+          aria-label="Enter a session code"
+          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md border-2 border-dashed border-line px-3 font-pixel text-[0.625rem] text-gold uppercase hover:border-gold"
+        >
+          <span aria-hidden="true">🔑</span> Code
+        </button>
+      )}
 
       <CharacterCreator
         key={stored?.id ?? "new-hero"}
         initial={stored ?? undefined}
         sessionCode={code}
-        submitLabel={code ? "Enter the Lobby" : "Climb the Tower"}
+        submitLabel={code ? "Join" : "Go"}
         onDone={handleDone}
       />
     </div>
@@ -120,15 +112,14 @@ export function JoinForm() {
 /** Same footprint as the form, shown while search params resolve. */
 export function JoinFormSkeleton() {
   return (
-    <div aria-hidden="true" className="flex animate-pulse flex-col gap-5 motion-reduce:animate-none">
-      <div className="h-5 w-48 rounded bg-surface-2" />
+    <div aria-hidden="true" className="flex animate-pulse flex-col gap-4 motion-reduce:animate-none">
+      <div className="h-11 w-24 rounded bg-surface-2" />
       <div className="h-12 rounded-md bg-surface-2" />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-4 gap-2">
         {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="h-16 rounded-md bg-surface-2 sm:h-32" />
+          <div key={i} className="h-20 rounded-md bg-surface-2" />
         ))}
       </div>
-      <div className="h-24 rounded-lg bg-surface-2" />
       <div className="h-13 rounded-md bg-ember/30" />
     </div>
   );

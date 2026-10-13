@@ -8,7 +8,7 @@ import type { AKey, JudgeRequest, JudgeResult, Mode } from "@/lib/types";
 export type Score = 0 | 1 | 2;
 
 const MIN_ANSWER_CHARS = 15;
-export const MAX_FEEDBACK_CHARS = 300;
+export const MAX_FEEDBACK_CHARS = 120; // one short sentence
 
 const clamp = (n: number): Score => (n <= 0 ? 0 : n >= 2 ? 2 : 1) as Score;
 
@@ -214,49 +214,51 @@ export function scoreReceiving(rawAnswer: string): { appreciate: Score; acceptOr
 // Feedback text (models Assist + Actionable itself)
 // ---------------------------------------------------------------------------
 
-const PRAISE: Record<AKey, string> = {
-  assist: "Your tone stays constructive and aimed at helping them grow.",
-  actionable: "You gave them a concrete step they can actually take.",
-  appreciate: "Opening with genuine thanks keeps the door open.",
-  acceptOrDecline: "You weighed the input and owned a clear decision.",
+// Every feedback string is ONE sentence of at most MAX_FEEDBACK_CHARS: a single next step for the weakest A.
+
+const BOTH_GREAT: Record<Mode, string> = {
+  giving: "Helpful tone and a clear next step: that's both A's.",
+  receiving: "Sincere thanks and a reasoned choice: that's both A's.",
 };
 
 const TIPS: Record<AKey, string> = {
-  assist:
-    "Swap accusations like \"you always...\" or words like \"terrible\" for what you observed and why it matters, e.g. \"I noticed the totals were off, which delayed the close.\"",
-  actionable:
-    "Add one doable next step with a when, e.g. \"Next time, could you run the checklist before sending, by 3pm?\"",
-  appreciate:
-    "Start with a sincere thank-you for the specific input, e.g. \"Thanks for flagging the invoice errors.\"",
-  acceptOrDecline:
-    "Say what you'll do and why, e.g. \"That makes sense, so I'll double-check totals before sending, but I'll keep my format because finance asked for it.\"",
-};
-
-const PARTIAL_PRAISE: Record<AKey, string> = {
-  assist: "You kept it mostly calm, which helps it land.",
-  actionable: "There's the start of a next step in there.",
-  appreciate: "There's a thank-you in there, which helps.",
-  acceptOrDecline: "You're starting to respond with a choice.",
-};
-
-const ZERO_OPENER: Record<Mode, string> = {
-  giving: "You spotted something worth raising.",
-  receiving: "You responded instead of brushing it off, which is a start.",
+  assist: "Drop the blame and say what you saw, like \"The totals were off, which delayed close.\"",
+  actionable: "Add one concrete step with a when, like \"Could you run the checklist by 3pm?\"",
+  appreciate: "Start with a specific thank-you, like \"Thanks for flagging the invoice errors.\"",
+  acceptOrDecline: "Say what you'll do and why, like \"I'll add checks, but keep my format for finance.\"",
 };
 
 const MILD_TIPS: Record<AKey, string> = {
-  assist: "Name one thing they did well first so the advice lands as support.",
-  actionable: "Make the step more specific with a time, number, or example.",
-  appreciate: "Make the thanks specific to what they pointed out.",
-  acceptOrDecline: "Add a short reason for your choice so it reads as a decision, not a reflex.",
+  assist: "Name one thing they did well first, so it lands as help.",
+  actionable: "Make your step more specific with a time, number, or example.",
+  appreciate: "Make your thank-you specific to what they pointed out.",
+  acceptOrDecline: "Add a short reason for your choice, so it reads as a decision.",
 };
 
-/** Trim to MAX_FEEDBACK_CHARS at a sentence boundary, closing any quote left open by the cut. */
+const INJECTION_TIP = "Only what you'd really say to your coworker gets graded, so write that.";
+const TOO_SHORT_TIP = "Too short to judge, so write 2-3 sentences you'd really say.";
+
+/** End of the first sentence (ignores "e.g." / "i.e."), or -1 when there is only one sentence. */
+function firstSentenceEnd(text: string): number {
+  const re = /[.!?]["”']?(?=\s+\S)/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const before = text.slice(Math.max(0, m.index - 3), m.index + 1).toLowerCase();
+    if (/(e\.g\.|i\.e\.|vs\.)$/.test(before)) continue;
+    return m.index + m[0].length;
+  }
+  return -1;
+}
+
+/** Keep only the first sentence, capped at MAX_FEEDBACK_CHARS at a word boundary, closing any open quote. */
 export function fit(text: string): string {
-  if (text.length <= MAX_FEEDBACK_CHARS) return text;
-  const cut = text.slice(0, MAX_FEEDBACK_CHARS - 2);
-  const lastStop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("? "), cut.lastIndexOf("! "));
-  let out = lastStop > 60 ? cut.slice(0, lastStop + 1) : `${cut.trimEnd()}…`;
+  let out = text.replace(/\s+/g, " ").trim();
+  const end = firstSentenceEnd(out);
+  if (end > 0) out = out.slice(0, end).trim();
+  if (out.length > MAX_FEEDBACK_CHARS) {
+    const cut = out.slice(0, MAX_FEEDBACK_CHARS - 2);
+    const lastSpace = cut.lastIndexOf(" ");
+    out = `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:]+$/, "")}…`;
+  }
   if ((out.match(/"/g) ?? []).length % 2 === 1) out += '"';
   else if ((out.match(/“/g) ?? []).length > (out.match(/”/g) ?? []).length) out += "”";
   return out;
@@ -267,27 +269,14 @@ export function buildFeedback(mode: Mode, scores: Record<AKey, Score> | Partial<
   const s1 = scores[a1] ?? 0;
   const s2 = scores[a2] ?? 0;
 
-  if (injection) {
-    return fit(
-      `Nice try, but the judge only grades what you'd actually say to your coworker. ${TIPS[a2]}`,
-    );
-  }
+  if (injection) return fit(INJECTION_TIP);
+  if (s1 === 2 && s2 === 2) return fit(BOTH_GREAT[mode]);
+  if (s1 === 0 && s2 === 0) return fit(TIPS[a1]);
 
-  if (s1 === 0 && s2 === 0) {
-    return fit(`${ZERO_OPENER[mode]} ${TIPS[a1]}`);
-  }
-
-  if (s1 === 2 && s2 === 2) {
-    return fit(`${PRAISE[a1]} ${PRAISE[a2]} To level up, keep it this specific every time.`);
-  }
-
-  // Praise the stronger A, coach the weaker one.
-  const [strong, weak] = s1 >= s2 ? [a1, a2] : [a2, a1];
+  // Coach the weaker A (ties go to the first A).
+  const weak = s1 <= s2 ? a1 : a2;
   const weakScore = scores[weak] ?? 0;
-  const strongScore = scores[strong] ?? 0;
-  const opener = strongScore === 2 ? PRAISE[strong] : strongScore === 1 ? PARTIAL_PRAISE[strong] : ZERO_OPENER[mode];
-  const tip = weakScore === 0 ? TIPS[weak] : MILD_TIPS[weak];
-  return fit(`${opener} ${tip}`);
+  return fit(weakScore === 0 ? TIPS[weak] : MILD_TIPS[weak]);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +305,7 @@ export function heuristicJudge(req: Pick<JudgeRequest, "mode" | "answer">): Judg
     scores,
     passed: isPassing(req.mode, scores),
     feedback: answer.length < MIN_ANSWER_CHARS && !injection
-      ? fit(`That's a bit short to judge. ${TIPS[req.mode === "giving" ? "actionable" : "acceptOrDecline"]}`)
+      ? fit(TOO_SHORT_TIP)
       : buildFeedback(req.mode, scores, injection),
     source: "heuristic",
   };

@@ -1,4 +1,4 @@
-import type { ElementType } from "react";
+import type { ElementType, ReactNode } from "react";
 
 export interface WordmarkProps {
   /** Element for the wordmark (use "h1" on pages where it is the main heading). */
@@ -16,7 +16,7 @@ const SIZES = {
 
 /** "OLSEN / TOWER OF DOOM" pixel wordmark with an ember gradient. */
 export function Wordmark({ as, size = "lg", align = "center", className = "" }: WordmarkProps) {
-  const Tag: ElementType = as ?? "div";
+  const Tag = (as ?? "div") as ElementType<{ className?: string; children?: ReactNode }>;
   const s = SIZES[size];
   return (
     <Tag

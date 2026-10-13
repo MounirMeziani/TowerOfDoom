@@ -13,10 +13,10 @@ export function SessionStats({ runs, online }: { runs: RunRow[]; online: number 
   const weakest = weakestA(stats);
 
   const tiles = [
-    { label: "Heroes online", value: String(online) },
-    { label: "Runs finished", value: String(summary.runs) },
-    { label: "Victory rate", value: summary.runs ? `${Math.round(summary.victoryRate * 100)}%` : "-" },
-    { label: "Avg score", value: summary.runs ? summary.avgScore.toLocaleString("en-US") : "-" },
+    { icon: "👥", label: "Online", value: String(online) },
+    { icon: "🏁", label: "Runs", value: String(summary.runs) },
+    { icon: "👑", label: "Win %", value: summary.runs ? `${Math.round(summary.victoryRate * 100)}%` : "-" },
+    { icon: "⭐", label: "Avg", value: summary.runs ? summary.avgScore.toLocaleString("en-US") : "-" },
   ];
 
   return (
@@ -25,7 +25,10 @@ export function SessionStats({ runs, online }: { runs: RunRow[]; online: number 
         <dl className="grid grid-cols-2 gap-3">
           {tiles.map((t) => (
             <div key={t.label} className="rounded-lg border-2 border-line bg-surface-2 px-3 py-3">
-              <dt className="text-xs uppercase tracking-wider text-muted">{t.label}</dt>
+              <dt className="text-xs uppercase tracking-wider text-muted">
+                <span aria-hidden="true">{t.icon} </span>
+                {t.label}
+              </dt>
               <dd className="mt-1 font-pixel text-xl text-text xl:text-2xl">{t.value}</dd>
             </div>
           ))}
@@ -35,15 +38,15 @@ export function SessionStats({ runs, online }: { runs: RunRow[]; online: number 
       <Panel as="section" aria-labelledby="mastery-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="mastery-heading" className="font-pixel text-xs uppercase text-ember-2 xl:text-sm">
-            Team mastery
+            <span aria-hidden="true">🎯 </span>Team
           </h2>
           {weakest ? (
             <p className="rounded border-2 border-gold/60 bg-gold/10 px-2 py-1 text-sm font-semibold text-gold">
-              Workshop focus: {A_INFO[weakest].label}
+              <span aria-hidden="true">⚠ </span>
+              <span className="sr-only">Focus: </span>
+              {A_INFO[weakest].label}
             </p>
-          ) : (
-            <p className="text-sm text-muted">Mastery appears as runs finish.</p>
-          )}
+          ) : null}
         </div>
         <ul className="flex flex-col gap-3">
           {A_KEYS.map((a) => {
@@ -57,10 +60,16 @@ export function SessionStats({ runs, online }: { runs: RunRow[]; online: number 
                 <div className="flex items-baseline justify-between gap-2 text-sm">
                   <span className={`font-semibold ${giving ? "text-giving" : "text-receiving"}`}>
                     {info.label}
-                    <span className="ml-2 text-xs font-normal text-muted">
-                      {giving ? "Giving" : "Receiving"} · {info.short}
+                    <span className="ml-2 text-xs font-normal" title={giving ? "Giving" : "Receiving"}>
+                      <span aria-hidden="true">{giving ? "🗣" : "👂"}</span>
+                      <span className="sr-only">{giving ? "Giving" : "Receiving"}</span>
                     </span>
-                    {isWeakest && <span className="ml-2 text-xs text-gold">← weakest</span>}
+                    {isWeakest && (
+                      <span className="ml-2 text-xs text-gold">
+                        <span aria-hidden="true">⚠</span>
+                        <span className="sr-only">weakest</span>
+                      </span>
+                    )}
                   </span>
                   <span className="font-pixel text-xs text-text">
                     {total ? `${pct}%` : "-"}

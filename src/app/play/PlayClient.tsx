@@ -22,7 +22,7 @@ function useHydrated(): boolean {
 
 export function PlayClient() {
   const hydrated = useHydrated();
-  if (!hydrated) return <PlayLoader message="Opening the tower doors..." />;
+  if (!hydrated) return <PlayLoader message="Loading" />;
   return <PlayGate />;
 }
 
@@ -34,16 +34,11 @@ function PlayGate() {
     return (
       <PlayFrame>
         <Panel className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <h1 className="font-pixel text-sm leading-relaxed text-ember sm:text-base">
-              {editing ? "Change your hero" : "Create your hero"}
-            </h1>
-            <p className="text-muted">Pick a name and a hero, then step into the Tower of Doom.</p>
-          </div>
+          <h1 className="sr-only">{editing ? "Change your hero" : "Create your hero"}</h1>
           <CharacterCreator
             initial={player ?? undefined}
             sessionCode={player?.sessionCode ?? null}
-            submitLabel="Climb the Tower"
+            submitLabel="Go"
             onDone={(p) => {
               setPlayer(p);
               setEditing(false);
@@ -67,7 +62,7 @@ function SessionGate({ player, onChangeHero }: { player: Player; onChangeHero: (
   }, [code, notFound, player]);
 
   const effectiveCode = notFound ? null : code;
-  if (effectiveCode && loading && !session) return <PlayLoader message={`Checking session ${effectiveCode}...`} />;
+  if (effectiveCode && loading && !session) return <PlayLoader message={`Checking session ${effectiveCode}`} />;
 
   // The Game sends players back to the lobby while the session is still in "lobby" status,
   // and skips its intro when the session is already "playing".

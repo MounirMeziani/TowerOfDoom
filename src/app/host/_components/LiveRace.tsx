@@ -45,19 +45,22 @@ export function LiveRace({ players, ended = false }: { players: LobbyPresence[];
 
   return (
     <section aria-labelledby="race-heading" className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="race-heading" className="font-pixel text-sm uppercase text-ember-2 xl:text-base">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 id="race-heading" className="sr-only">
           {ended ? "Final positions" : "Live race"}
         </h2>
-        <p className="text-sm text-muted">
-          {!(ended && climbing === 0) && (
-            <>
-              <span className="font-pixel text-xs text-text xl:text-sm">{climbing}</span>{" "}
-              {ended ? "still finishing" : "climbing"} ·{" "}
-            </>
-          )}
-          <span className="font-pixel text-xs text-gold xl:text-sm">{victors}</span> at the summit
-        </p>
+        {!(ended && climbing === 0) && (
+          <span title="Climbing" className="font-pixel text-xs text-text xl:text-sm">
+            <span aria-hidden="true">🧗 </span>
+            <span className="sr-only">Climbing: </span>
+            {climbing}
+          </span>
+        )}
+        <span title="Summit" className="font-pixel text-xs text-gold xl:text-sm">
+          <span aria-hidden="true">👑 </span>
+          <span className="sr-only">At the summit: </span>
+          {victors}
+        </span>
       </div>
 
       <LayoutGroup id="race">
@@ -141,13 +144,6 @@ export function LiveRace({ players, ended = false }: { players: LobbyPresence[];
           })}
         </ol>
       </LayoutGroup>
-      {players.length === 0 && (
-        <p className="text-sm text-muted">
-          {ended
-            ? "The session has ended. Every finished run is on the leaderboard."
-            : "No heroes are connected right now. Results still land on the leaderboard."}
-        </p>
-      )}
     </section>
   );
 }

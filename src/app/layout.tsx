@@ -28,8 +28,7 @@ export const metadata: Metadata = {
     default: "Olsen Tower of Doom",
     template: "%s · Olsen Tower of Doom",
   },
-  description:
-    "Climb a 12-floor office tower overrun by feedback villains and master Olsen Consulting's 2 A's of Feedback: Assist + Actionable when giving, Appreciate + Accept or Decline when receiving.",
+  description: "A 3D feedback quiz tower: 12 floors, the 2 A's of Feedback.",
   applicationName: "Olsen Tower of Doom",
 };
 

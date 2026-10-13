@@ -40,7 +40,7 @@ export function HeroCard({
     >
       <HeroAvatar heroId={hero.id} size={avatarSize} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-text">{name || "Nameless Hero"}</p>
+        <p className="truncate font-semibold text-text">{name || "?"}</p>
         <p className="truncate text-xs font-medium" style={{ color: hero.color }}>
           {subtitle ?? hero.name}
         </p>

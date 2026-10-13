@@ -4,7 +4,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { HeroCard } from "@/components/character/HeroCard";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
-import { getHero } from "@/lib/characters";
 import type { LobbyPresence } from "@/lib/types";
 
 export interface LobbyStageProps {
@@ -22,16 +21,14 @@ export function LobbyStage({ players, connected, canStart, starting, onStart }: 
 
   return (
     <Panel as="section" aria-labelledby="lobby-heading" className="flex min-h-[28rem] flex-col gap-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 id="lobby-heading" className="font-pixel text-xs uppercase text-ember-2 xl:text-sm">
-            The lobby
-          </h2>
-          <p className="mt-2 text-sm text-muted xl:text-base">
-            {connected ? "Heroes appear here as they join." : "Connecting to the lobby..."}
-          </p>
-        </div>
-        <p aria-live="polite" className="text-right">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2 id="lobby-heading" className="sr-only">
+          Lobby
+        </h2>
+        <p aria-live="polite" className="flex items-center gap-3">
+          <span aria-hidden="true" className="text-3xl xl:text-5xl">
+            👥
+          </span>
           <motion.span
             key={count}
             initial={reduce ? false : { scale: 1.4, color: "#ffcf4a" }}
@@ -41,9 +38,13 @@ export function LobbyStage({ players, connected, canStart, starting, onStart }: 
           >
             {count}
           </motion.span>
-          <span className="ml-3 font-pixel text-xs uppercase text-muted xl:text-sm">
-            {count === 1 ? "hero ready" : "heroes ready"}
-          </span>
+          <span className="sr-only">{count === 1 ? "hero ready" : "heroes ready"}</span>
+          {!connected && (
+            <span title="Connecting" className="text-xl motion-safe:animate-pulse">
+              <span aria-hidden="true">📡</span>
+              <span className="sr-only">Connecting</span>
+            </span>
+          )}
         </p>
       </div>
 
@@ -53,7 +54,6 @@ export function LobbyStage({ players, connected, canStart, starting, onStart }: 
             <span aria-hidden="true" className="text-5xl motion-safe:animate-bounce">
               🗼
             </span>
-            <p className="text-muted xl:text-lg">Waiting for the first brave hero to scan the code...</p>
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -67,7 +67,7 @@ export function LobbyStage({ players, connected, canStart, starting, onStart }: 
                   exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.8, transition: { duration: 0.25 } }}
                   transition={{ type: "spring", stiffness: 500, damping: 28 }}
                 >
-                  <HeroCard name={p.name} heroId={p.heroId} subtitle={getHero(p.heroId).title} />
+                  <HeroCard name={p.name} heroId={p.heroId} />
                 </motion.li>
               ))}
             </AnimatePresence>
@@ -81,17 +81,11 @@ export function LobbyStage({ players, connected, canStart, starting, onStart }: 
             size="lg"
             onClick={onStart}
             disabled={starting}
+            aria-label="Start the climb"
             className="w-full max-w-xl py-5 text-sm xl:text-lg"
           >
-            {starting ? "Opening the gates..." : "Start the Climb"}
+            {starting ? "⏳" : "▶ Start"}
           </Button>
-          <p className="text-xs text-muted">
-            {count > 0
-              ? "Everyone in the lobby gets a 3-2-1 countdown and starts together."
-              : connected
-                ? "No heroes yet. You can still start; anyone in the lobby gets the countdown."
-                : "Live hero list is offline on this screen. Starting still reaches every hero in the lobby."}
-          </p>
         </div>
       )}
     </Panel>

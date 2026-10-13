@@ -1,1161 +1,627 @@
 // Floor content for Olsen Tower of Doom.
-// 24 regular floors (12 giving: 8 choose + 4 spot; 12 receiving: 8 choose + 4 spot) and 4 boss floors.
+// 24 regular floors (12 giving, 12 receiving), all kind "choose", plus 4 boss floors.
 // Giving feedback  -> Assist + Actionable.   Receiving feedback -> Appreciate + Accept or Decline.
-import { MODE_AS, type AKey, type BossFloor, type Choice, type Mode, type RegularFloor } from "@/lib/types";
+//
+// Clarity rules (the question panel shows only: mode icon, setup, prompt, 3 choices):
+// - setup: 1-2 plain sentences, second person, <= 140 chars
+// - prompt: one short question, <= 50 chars
+// - exactly 3 choices, <= 90 chars each: one correct (hits both A's), and two wrong ones that each
+//   clearly fail a DIFFERENT A of the mode (missFirst fails the mode's first A, missSecond the second)
+// - every explanation: one sentence, <= 110 chars, naming the A
+// Villain + department are silent 3D flavor only (never shown in the question/reveal UI).
+import { MODE_AS, type BossFloor, type Choice, type Mode, type RegularFloor, type Villain } from "@/lib/types";
 
-// ---------------------------------------------------------------------------------------------
-// Spot-floor helper. A spot floor shows a quote and asks which A it missed. Each verdict states
-// whether each of the mode's two A's is present; a verdict "hits" an A when it judges that A the
-// same way the truth does, and "misses" it otherwise. So the correct verdict always hits both.
-// ---------------------------------------------------------------------------------------------
-type Verdict = "missedFirst" | "missedSecond" | "missedBoth" | "nailedBoth";
+/** [choice text, one-sentence explanation] */
+type Option = readonly [text: string, explanation: string];
 
-const VERDICT_PRESENCE: Record<Verdict, readonly [boolean, boolean]> = {
-  missedFirst: [false, true],
-  missedSecond: [true, false],
-  missedBoth: [false, false],
-  nailedBoth: [true, true],
-};
-
-const VERDICT_ORDER: readonly Verdict[] = ["missedFirst", "missedSecond", "missedBoth", "nailedBoth"];
-
-const VERDICT_LABELS: Record<Mode, Record<Verdict, string>> = {
-  giving: {
-    missedFirst: "Missed Assist",
-    missedSecond: "Missed Actionable",
-    missedBoth: "Missed both",
-    nailedBoth: "Nailed both",
-  },
-  receiving: {
-    missedFirst: "Missed Appreciate",
-    missedSecond: "Missed Accept or Decline",
-    missedBoth: "Missed both",
-    nailedBoth: "Nailed both",
-  },
-};
-
-function spotChoices(mode: Mode, truth: Verdict, explanations: Record<Verdict, string>): Choice[] {
-  const keys = MODE_AS[mode];
-  const truthPresence = VERDICT_PRESENCE[truth];
-  return VERDICT_ORDER.map((verdict, i) => {
-    const presence = VERDICT_PRESENCE[verdict];
-    const hits: AKey[] = [];
-    const misses: AKey[] = [];
-    keys.forEach((key, k) => (presence[k] === truthPresence[k] ? hits : misses).push(key));
-    return {
-      id: String.fromCharCode(97 + i), // a, b, c, d
-      text: VERDICT_LABELS[mode][verdict],
-      correct: verdict === truth,
-      hits,
-      misses,
-      explanation: explanations[verdict],
-      present: keys.filter((_, k) => presence[k]),
-    };
-  });
+interface FloorSpec {
+  id: string;
+  mode: Mode;
+  department: string;
+  villain: Villain;
+  setup: string;
+  prompt: string;
+  best: Option;        // correct: hits both of the mode's A's
+  missFirst: Option;   // fails the mode's first A (Assist / Appreciate), gets the second right
+  missSecond: Option;  // fails the mode's second A (Actionable / Accept or Decline), gets the first right
 }
 
-const SPOT_PROMPT_GIVING = "Which A did this feedback miss?";
-const SPOT_PROMPT_RECEIVING = "Which A did this reaction miss?";
+/** Stable per-floor position for the correct answer, so source order never gives it away. */
+function slotFor(id: string): number {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 3;
+}
+
+function floor(spec: FloorSpec): RegularFloor {
+  const [first, second] = MODE_AS[spec.mode];
+  const best: Omit<Choice, "id"> = {
+    text: spec.best[0],
+    explanation: spec.best[1],
+    correct: true,
+    hits: [first, second],
+    misses: [],
+  };
+  const wrongFirst: Omit<Choice, "id"> = {
+    text: spec.missFirst[0],
+    explanation: spec.missFirst[1],
+    correct: false,
+    hits: [second],
+    misses: [first],
+  };
+  const wrongSecond: Omit<Choice, "id"> = {
+    text: spec.missSecond[0],
+    explanation: spec.missSecond[1],
+    correct: false,
+    hits: [first],
+    misses: [second],
+  };
+  const ordered = [wrongFirst, wrongSecond];
+  ordered.splice(slotFor(spec.id), 0, best);
+  return {
+    id: spec.id,
+    kind: "choose",
+    mode: spec.mode,
+    department: spec.department,
+    villain: spec.villain,
+    setup: spec.setup,
+    prompt: spec.prompt,
+    choices: ordered.map((c, i) => ({ ...c, id: String.fromCharCode(97 + i) })), // a, b, c
+  };
+}
 
 // ---------------------------------------------------------------------------------------------
-// GIVING FEEDBACK — choose (8)
+// GIVING FEEDBACK (12) — Assist + Actionable
 // ---------------------------------------------------------------------------------------------
-const GIVING_CHOOSE: RegularFloor[] = [
-  {
+const GIVING: RegularFloor[] = [
+  floor({
     id: "g-ap-01",
-    kind: "choose",
     mode: "giving",
-    department: "Accounts Payable — Floor of Endless Invoices",
-    villain: {
-      name: "Sir Rants-a-Lot",
-      emoji: "🗯️",
-      title: "Knight of the Angry Reply-All",
-      taunt: "Why help when you can VENT? Caps lock is a leadership style!",
-    },
-    setup:
-      "Your teammate Jordan coded twelve vendor invoices to the wrong GL accounts, and you spent your morning fixing them before the payment run. Jordan is new to AP.",
+    department: "Accounts Payable",
+    villain: { name: "Sir Rants-a-Lot", emoji: "🗯️", title: "Knight of Reply-All", taunt: "Just vent!" },
+    setup: "New teammate Jordan coded 12 invoices to the wrong accounts. You spent your morning fixing them.",
     prompt: "What do you say to Jordan?",
-    choices: [
-      {
-        id: "a",
-        text: "“I lost my whole morning fixing your coding. Seriously, Jordan, this is basic stuff.”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "That's venting, not helping (misses Assist), and “this is basic stuff” gives Jordan nothing concrete to change (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“I'd like to help you nail coding. Let's add the GL cheat sheet to your desk and do a 15-minute check of your batch before Thursday's run.”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "It's framed around Jordan's growth (Assist) and gives two concrete steps with a time: a cheat sheet and a pre-run check (Actionable).",
-      },
-      {
-        id: "c",
-        text: "“No worries at all! Coding is tricky. Just try to be a little more careful next time, okay?”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Kind and supportive (Assist), but “be more careful” isn't a step Jordan can actually do (misses Actionable).",
-      },
-      {
-        id: "d",
-        text: "“Use the cheat sheet. Every invoice. If I have to fix this again, it goes to the manager.”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "The step is concrete (Actionable), but the threat makes it about your frustration, not Jordan's improvement (misses Assist).",
-      },
+    best: [
+      "Let's review the account cheat sheet together, and I'll check your next batch Thursday.",
+      "It offers help (Assist) and gives clear steps with a day attached (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "I wasted my whole morning on this. Use the cheat sheet on every invoice.",
+      "The step is clear, but complaining about your morning is venting, not helping (misses Assist).",
+    ],
+    missSecond: [
+      "No worries, coding is tricky! Just try to be more careful next time.",
+      "Kind, but “be more careful” is not a step Jordan can act on (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-cs-02",
-    kind: "choose",
     mode: "giving",
-    department: "Client Success — Floor of Lingering Demos",
-    villain: {
-      name: "The Monologue Monster",
-      emoji: "👾",
-      title: "Devourer of Client Attention",
-      taunt: "Just tell them it was 'a bit long'. They'll figure out the rest!",
-    },
-    setup:
-      "Your colleague Aisha ran a client demo of the new AP automation workflow. It ran 25 minutes over, and the client's CFO left before the pricing slide. Aisha asks how it went.",
-    prompt: "What feedback do you give Aisha?",
-    choices: [
-      {
-        id: "a",
-        text: "“It was great overall! Maybe just a bit long? Something to think about.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Friendly (Assist), but “a bit long, something to think about” leaves Aisha guessing what to change (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“We lost the CFO. That demo was painful to sit through, honestly.”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "This reacts with frustration instead of helping (misses Assist) and offers no next step (misses Actionable).",
-      },
-      {
-        id: "c",
-        text: "“Your workflow walkthrough was clear! Next time, let's cap the demo at 30 minutes and put pricing at minute 20. Want to rehearse Tuesday?”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "It builds on what worked and offers to rehearse (Assist), with a time cap and a slide order Aisha can use (Actionable).",
-      },
+    department: "Client Success",
+    villain: { name: "The Monologue Monster", emoji: "👾", title: "Devourer of Time", taunt: "Say it was long. Done." },
+    setup: "Aisha's client demo ran 25 minutes over, and the CFO left before the pricing slide. She asks how it went.",
+    prompt: "What do you tell Aisha?",
+    best: [
+      "Your walkthrough was clear. Next time, cap it at 30 minutes and show pricing by minute 20.",
+      "It builds on what worked (Assist) and gives a time cap and slide order she can use (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "We lost the CFO because you dragged on. Cap it at 30 minutes next time.",
+      "The time cap is clear, but blaming her is frustration, not help (misses Assist).",
+    ],
+    missSecond: [
+      "It was great overall! Maybe a bit long? Something to think about.",
+      "Friendly, but “a bit long” leaves her guessing what to change (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-close-03",
-    kind: "choose",
     mode: "giving",
-    department: "Month-End Close — Floor of Unbalanced Ledgers",
-    villain: {
-      name: "Baron Blame",
-      emoji: "🫵",
-      title: "Pointer of Fingers",
-      taunt: "Find the culprit! Feedback is just blame with extra steps.",
-    },
-    setup:
-      "Ravi's bank reconciliation is off by $4,312, and there's no note explaining the reconciling items. Close is in two days and you're reviewing his work.",
+    department: "Month-End Close",
+    villain: { name: "Baron Blame", emoji: "🫵", title: "Pointer of Fingers", taunt: "Find the culprit!" },
+    setup: "Ravi's bank reconciliation is off by $4,312, with no notes on the differences. Close is in two days.",
     prompt: "What do you tell Ravi?",
-    choices: [
-      {
-        id: "a",
-        text: "“This rec is a mess. Whose fault do you think it'll be if close slips?”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "Blame isn't help (misses Assist), and calling it “a mess” doesn't tell Ravi what to fix (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“Fix the variance and add notes. Today.”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "Clear tasks (Actionable), but the curt order shows no interest in helping Ravi get better at recs (misses Assist).",
-      },
-      {
-        id: "c",
-        text: "“Thanks for getting this started! I'm sure you'll sort it out, you always do.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Encouraging (Assist), but it never mentions the $4,312 gap or what to do about it (misses Actionable).",
-      },
-      {
-        id: "d",
-        text: "“Let's get this rec close-ready together. Can you list each reconciling item with a one-line note, then tie out the $4,312 by tomorrow noon?”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "“Together” signals support (Assist), and Ravi knows exactly what to do and by when: itemize, annotate, tie out (Actionable).",
-      },
+    best: [
+      "Let's find the gap together. Add a note for each difference and tie it out by Wednesday.",
+      "It offers to help (Assist) and names exact steps with a deadline (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "This rec is a mess. Add notes and fix the variance today.",
+      "The tasks are clear, but calling it a mess is not aimed at helping Ravi (misses Assist).",
+    ],
+    missSecond: [
+      "Thanks for starting this! I'm sure you'll sort it out, you always do.",
+      "Warm, but it never says what to fix (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-it-04",
-    kind: "choose",
     mode: "giving",
-    department: "IT Help Desk — Floor of Infinite Reboots",
-    villain: {
-      name: "The Ghost Reviewer",
-      emoji: "👻",
-      title: "Haunter of Unspoken Opinions",
-      taunt: "Say nothing. Sigh loudly. They'll sense it eventually...",
-    },
-    setup:
-      "Help desk tech Mei closed your VPN ticket as “resolved” with no notes, but the VPN still drops every hour. Her team lead asks if you have any feedback for her.",
-    prompt: "What do you share?",
-    choices: [
-      {
-        id: "a",
-        text: "“Nah, it's fine.” (Then you complain about it in the team chat.)",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "Ghosting and venting elsewhere helps no one (misses Assist) and gives Mei nothing to act on (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“Mei was friendly! Maybe a bit quick to close things, but overall good.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Kind (Assist), but “a bit quick” is too vague for Mei to change anything (misses Actionable).",
-      },
-      {
-        id: "c",
-        text: "“Could Mei confirm the fix with the user before closing and add a one-line note on what was changed? My VPN still drops hourly.”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "It's aimed at improving the process, not venting (Assist), with two specific habits plus the facts needed to reopen (Actionable).",
-      },
-      {
-        id: "d",
-        text: "“Mei needs to test fixes before closing tickets. My VPN still drops hourly. Not great, honestly.”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "There's a concrete step (Actionable), but “not great, honestly” reads as a complaint, not an effort to help Mei grow (misses Assist).",
-      },
+    department: "IT Help Desk",
+    villain: { name: "The Ghost Reviewer", emoji: "👻", title: "Haunter of Silence", taunt: "Say nothing. Ever." },
+    setup: "Mei from the help desk closed your VPN ticket with no notes. The VPN still drops every hour.",
+    prompt: "What do you tell Mei?",
+    best: [
+      "Thanks for the quick help! It still drops hourly. Can you reopen it and log your steps?",
+      "It's respectful and helpful (Assist) and asks for two clear actions (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "Closing it with no notes was lazy. Reopen it now and write down what you did.",
+      "The steps are clear, but calling her lazy is an insult, not help (misses Assist).",
+    ],
+    missSecond: [
+      "Thanks so much, you're always great! It's still a bit flaky, but no stress.",
+      "Kind, but she has no idea what to do next (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-sales-05",
-    kind: "choose",
     mode: "giving",
-    department: "Sales — Floor of Pipeline Peril",
-    villain: {
-      name: "Count Nitpick",
-      emoji: "🧛",
-      title: "Drainer of Morale, One Comma at a Time",
-      taunt: "List EVERY flaw. Forty-seven bullet points is thorough, not cruel!",
-    },
-    setup:
-      "Diego's proposal deck for a big AP automation prospect has 38 slides, tiny fonts, and the ROI number is buried on slide 31. He asks you to review it before tomorrow's pitch.",
-    prompt: "What feedback do you give Diego?",
-    choices: [
-      {
-        id: "a",
-        text: "“Bump the fonts on slides 3 and 4 to 18pt, swap the old logo on 7, fix the comma on 9, recolor the chart on 12... honestly, where do I even start?”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "Every fix is concrete (Actionable), but a sigh-filled wall of nitpicks the night before a pitch overwhelms rather than helps, and it skips the buried ROI that matters most (misses Assist).",
-      },
-      {
-        id: "b",
-        text: "“Love the energy! It just needs to pop more. You've got this!”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Encouraging (Assist), but “pop more” can't be acted on the night before a pitch (misses Actionable).",
-      },
-      {
-        id: "c",
-        text: "“Your ROI case is strong, so let's lead with it. Move slide 31 to slide 2 and cut to the 12 slides the client needs. I can help trim tonight.”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "It highlights a strength and offers help (Assist), then names the top two changes that matter most (Actionable).",
-      },
+    department: "Sales",
+    villain: { name: "Count Nitpick", emoji: "🧛", title: "Drainer of Morale", taunt: "Nitpick everything!" },
+    setup: "Diego's pitch deck has 38 slides and buries the key number on slide 31. He asks for a review before tomorrow.",
+    prompt: "What do you tell Diego?",
+    best: [
+      "Strong content! Move the key number to slide 2 and cut to 12 slides. Want to run it at 4?",
+      "It starts with a real strength and offers practice (Assist) and gives exact changes (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "Nobody will sit through 38 slides of this. Cut it to 12 and move the number up.",
+      "The changes are clear, but the put-down makes it about your annoyance (misses Assist).",
+    ],
+    missSecond: [
+      "Looks like a lot of work went into this! Maybe tighten it up a bit?",
+      "Nice, but “tighten it up” doesn't say what to cut or move (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-data-06",
-    kind: "choose",
     mode: "giving",
-    department: "Data & Reporting — Floor of Broken Formulas",
-    villain: {
-      name: "The Sarcasm Sphinx",
-      emoji: "😼",
-      title: "Asker of Rhetorical Riddles",
-      taunt: "Wow, great spreadsheet. Said no one. Ever. Heh.",
-    },
-    setup:
-      "Lena built the client KPI spreadsheet, but the totals are hard-coded, so they broke when new data was pasted in. The client spotted the wrong numbers first.",
-    prompt: "What do you say to Lena?",
-    choices: [
-      {
-        id: "a",
-        text: "“Wow, hard-coded totals. Bold choice. The client sure enjoyed that.”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "Sarcasm stings without helping (misses Assist) and doesn't say what to do instead (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“Spreadsheets are hard, don't stress! Just double-check things going forward.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Reassuring (Assist), but “double-check things” is too vague to prevent the next break (misses Actionable).",
-      },
-      {
-        id: "c",
-        text: "“Replace every total with SUM formulas and add a check cell. Clients should never catch our errors.”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "Concrete fixes (Actionable), but the scolding close makes it a reprimand, not support (misses Assist).",
-      },
-      {
-        id: "d",
-        text: "“I want your sheet to be bulletproof. Could you swap the hard-coded totals for SUM formulas and add a check cell that flags mismatches? I'll share a template.”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "Offers help and a template (Assist), plus two exact changes that stop this happening again (Actionable).",
-      },
+    department: "Data & Reporting",
+    villain: { name: "The Sarcasm Sphinx", emoji: "😼", title: "Asker of Riddles", taunt: "Be sarcastic!" },
+    setup: "Lena's spreadsheet totals were typed in by hand, so they broke when new data came in. The client noticed first.",
+    prompt: "What do you tell Lena?",
+    best: [
+      "Let's fix it together: swap the typed totals for SUM formulas and add a check row.",
+      "It's supportive (Assist) and gives a specific fix she can do today (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "Typed-in totals? Really? Use formulas, and don't embarrass us again.",
+      "The fix is clear, but the sarcasm is venting, not help (misses Assist).",
+    ],
+    missSecond: [
+      "Don't worry, spreadsheets are hard. Just double-check things next time.",
+      "Kind, but “double-check things” is too vague to act on (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-pm-07",
-    kind: "choose",
     mode: "giving",
-    department: "Project Management — Floor of Slipping Gantt Charts",
-    villain: {
-      name: "The Deadline Dragon",
-      emoji: "🐲",
-      title: "Scorcher of Status Meetings",
-      taunt: "Breathe fire in the stand-up! Public roasting builds character!",
-    },
-    setup:
-      "Marcus missed the data-migration milestone by a week and didn't flag it until the day it was due, so the client launch slipped. You lead the project.",
-    prompt: "What feedback do you give Marcus, one-on-one?",
-    choices: [
-      {
-        id: "a",
-        text: "“Next time you're at risk, flag it in our Monday check-in at least five days ahead, and we'll re-plan together. How can I make that easier?”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "Asking how to make it easier is support (Assist), and the rule is concrete: flag at Monday check-in, five days ahead (Actionable).",
-      },
-      {
-        id: "b",
-        text: "“You blindsided everyone. I had to apologize to the client because of you.”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "This unloads your frustration (misses Assist) and says nothing about what Marcus should do next time (misses Actionable).",
-      },
-      {
-        id: "c",
-        text: "“These things happen. Just communicate a bit better going forward.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Gracious (Assist), but “communicate better” doesn't say when, how, or to whom (misses Actionable).",
-      },
+    department: "Project Management",
+    villain: { name: "The Deadline Dragon", emoji: "🐲", title: "Scorcher of Meetings", taunt: "Burn them!" },
+    setup: "Marcus missed a project milestone by a week and only told you on the due date. The client launch slipped.",
+    prompt: "What do you tell Marcus?",
+    best: [
+      "I want to help you flag risks early. Send me a short status every Friday, risks first.",
+      "It's aimed at his growth (Assist) and sets a clear weekly habit (Actionable).",
     ],
-  },
-  {
+    missFirst: [
+      "You sank the launch. Send me a status update every Friday from now on.",
+      "The habit is clear, but “you sank the launch” is blame, not help (misses Assist).",
+    ],
+    missSecond: [
+      "These things happen! Just keep me in the loop a bit more, okay?",
+      "Supportive, but “a bit more” gives him nothing concrete to do (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-mkt-08",
-    kind: "choose",
     mode: "giving",
-    department: "Marketing — Floor of Forgotten Calls-to-Action",
-    villain: {
-      name: "Lady Looks-Great",
-      emoji: "🍵",
-      title: "Duchess of Lukewarm Praise",
-      taunt: "Just say 'looks great!' Honesty is so... awkward.",
-    },
-    setup:
-      "Priya's client newsletter is nearly ready, but the “Book a demo” link is buried in paragraph six and the subject line is 14 words long. She asks for a quick look.",
-    prompt: "What do you tell Priya?",
-    choices: [
-      {
-        id: "a",
-        text: "“Looks great! Maybe tighten it up a little? Up to you.”",
-        correct: false,
-        hits: ["assist"],
-        misses: ["actionable"],
-        explanation:
-          "Warm (Assist), but “tighten it up” doesn't say what or where (misses Actionable).",
-      },
-      {
-        id: "b",
-        text: "“The writing is engaging! Two tweaks: make “Book a demo” a button in paragraph one, and cut the subject line to under 7 words. Want a second look after?”",
-        correct: true,
-        hits: ["assist", "actionable"],
-        misses: [],
-        explanation:
-          "Leads with a strength and offers a re-review (Assist), with two precise edits Priya can make in minutes (Actionable).",
-      },
-      {
-        id: "c",
-        text: "“Who buries the CTA in paragraph six? Did anyone proofread this?”",
-        correct: false,
-        hits: [],
-        misses: ["assist", "actionable"],
-        explanation:
-          "Rhetorical jabs are frustration, not help (misses Assist), and there's no clear fix offered (misses Actionable).",
-      },
-      {
-        id: "d",
-        text: "“Move the CTA up. Shorten the subject. Should've caught that yourself.”",
-        correct: false,
-        hits: ["actionable"],
-        misses: ["assist"],
-        explanation:
-          "The edits are concrete (Actionable), but the jab at the end turns help into a put-down (misses Assist).",
-      },
+    department: "Marketing",
+    villain: { name: "Lady Looks-Great", emoji: "🍵", title: "Duchess of Meh", taunt: "Looks great. Next!" },
+    setup: "Sam's client newsletter is almost done, but the demo link is buried in paragraph six. Sam asks for a quick look.",
+    prompt: "What do you tell Sam?",
+    best: [
+      "The stories are great. Move the demo link into the first paragraph as a button.",
+      "It names a real strength (Assist) and one exact change (Actionable).",
     ],
-  },
-];
-
-// ---------------------------------------------------------------------------------------------
-// GIVING FEEDBACK — spot (4)
-// ---------------------------------------------------------------------------------------------
-const GIVING_SPOT: RegularFloor[] = [
-  {
+    missFirst: [
+      "Nobody will ever find that link. Move it to the first paragraph.",
+      "The change is clear, but the jab is not meant to help Sam (misses Assist).",
+    ],
+    missSecond: [
+      "Looks great! Maybe make the link pop a bit more?",
+      "Friendly, but “make it pop” doesn't say what to do (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-train-09",
-    kind: "spot",
     mode: "giving",
-    department: "Training — Floor of Sleepy Workshops",
-    villain: {
-      name: "The Snark Knight",
-      emoji: "🗡️",
-      title: "Wielder of the Backhanded Compliment",
-      taunt: "Specific AND savage. That's the dream, right?",
-    },
-    setup:
-      "A teammate just ran their first client training on the AP portal, and half the room checked their phones. Here's the feedback a colleague gave them.",
-    quote:
-      "“Honestly, that was a snooze-fest. Next time cut it to 10 slides, add a hands-on exercise at minute 15, and rehearse once.”",
-    prompt: SPOT_PROMPT_GIVING,
-    choices: spotChoices("giving", "missedFirst", {
-      missedFirst:
-        "Right. The steps are concrete (Actionable), but “snooze-fest” comes from frustration, not a wish to help them improve (misses Assist).",
-      missedSecond:
-        "Not quite. Ten slides, an exercise at minute 15, one rehearsal: that's very Actionable. The problem is the tone.",
-      missedBoth:
-        "Half right. The insult misses Assist, but the next steps are clear and concrete, so Actionable is there.",
-      nailedBoth:
-        "Close, but “snooze-fest” is venting. Assist means the feedback is meant to help, and an insult undercuts that.",
-    }),
-  },
-  {
+    department: "Training",
+    villain: { name: "The Snark Knight", emoji: "🗡️", title: "Backhanded Blade", taunt: "Snark wins!" },
+    setup: "A teammate ran their first client training, and half the room was on their phones. They ask for your feedback.",
+    prompt: "What do you say?",
+    best: [
+      "You know the portal well. Next time, try 10 slides and a hands-on exercise at minute 15.",
+      "It starts with a real strength (Assist) and gives two concrete changes (Actionable).",
+    ],
+    missFirst: [
+      "Honestly, it was a snooze-fest. Cut it to 10 slides and add an exercise.",
+      "The steps are clear, but “snooze-fest” is an insult, not help (misses Assist).",
+    ],
+    missSecond: [
+      "You did great for a first time! Maybe make it more engaging?",
+      "Encouraging, but “more engaging” doesn't say how (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-onb-10",
-    kind: "spot",
     mode: "giving",
-    department: "Onboarding — Floor of Lost New Hires",
-    villain: {
-      name: "The Vague-inator",
-      emoji: "🌫️",
-      title: "Lord of the Fog of Feedback",
-      taunt: "Be supportive. Be positive. Be completely unclear!",
-    },
-    setup:
-      "A new consultant asks how their first client kickoff went. They forgot to confirm the project timeline and the client left unsure about next steps. Here's what their buddy said.",
-    quote:
-      "“You did awesome for your first one! I'm totally here for you. Just keep growing into the role and it'll click.”",
-    prompt: SPOT_PROMPT_GIVING,
-    choices: spotChoices("giving", "missedSecond", {
-      missedFirst:
-        "Not this one. It's warm and supportive, so Assist is there. What's missing is any concrete step.",
-      missedSecond:
-        "Right. Supportive (Assist), but nothing about confirming the timeline or recapping next steps (misses Actionable).",
-      missedBoth:
-        "Half right. It's vague (misses Actionable), but the intent to support them is genuine, so Assist is there.",
-      nailedBoth:
-        "Kindness alone isn't enough. “Keep growing” gives no step to take, like confirming the timeline in the next kickoff.",
-    }),
-  },
-  {
+    department: "Onboarding",
+    villain: { name: "The Vague-inator", emoji: "🌫️", title: "Lord of Fog", taunt: "Be vague!" },
+    setup: "A new consultant ran their first client kickoff but never confirmed the timeline. The client left unsure.",
+    prompt: "What do you tell them?",
+    best: [
+      "Great energy! Next time, confirm the timeline before you end and email it within an hour.",
+      "It's encouraging (Assist) and gives two clear steps with timing (Actionable).",
+    ],
+    missFirst: [
+      "That was rough to watch. Always confirm the timeline before the call ends.",
+      "The step is clear, but “rough to watch” is a jab, not help (misses Assist).",
+    ],
+    missSecond: [
+      "Great energy! Just be a bit more organized next time.",
+      "Positive, but “more organized” is not a step they can take (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-legal-11",
-    kind: "spot",
     mode: "giving",
-    department: "Legal & Contracts — Floor of Fine Print",
-    villain: {
-      name: "The Eye-Roll Oracle",
-      emoji: "🔮",
-      title: "Seer of Nothing Specific",
-      taunt: "Sigh deeply. Mutter 'it's just not it.' They'll know.",
-    },
-    setup:
-      "A colleague redlined a client's statement of work but missed the payment-terms clause. Here's the feedback they got from the reviewer.",
-    quote: "“Ugh. This redline is just... not it. You know what I mean. Do better.”",
-    prompt: SPOT_PROMPT_GIVING,
-    choices: spotChoices("giving", "missedBoth", {
-      missedFirst:
-        "True, the “Ugh” misses Assist, but there's more: “not it” and “do better” give no concrete step either.",
-      missedSecond:
-        "True, it's not Actionable, but the frustrated “Ugh... do better” also misses Assist.",
-      missedBoth:
-        "Right. It vents instead of helping (misses Assist) and never mentions the payment-terms clause or a fix (misses Actionable).",
-      nailedBoth:
-        "Not even close. No help, no steps. Try: “Can you add the Net 30 payment terms in section 4 before it goes out?”",
-    }),
-  },
-  {
+    department: "Legal & Contracts",
+    villain: { name: "The Eye-Roll Oracle", emoji: "🔮", title: "Seer of Nothing", taunt: "Just sigh loudly." },
+    setup: "A colleague reviewed a client contract but missed the payment-terms clause. You're checking their work.",
+    prompt: "What do you tell them?",
+    best: [
+      "Good catches overall. Add payment terms to your checklist and review that clause first.",
+      "It credits their work (Assist) and gives a specific habit to adopt (Actionable).",
+    ],
+    missFirst: [
+      "You missed the one clause that matters. Check payment terms first, always.",
+      "The habit is clear, but the dig is not meant to help them (misses Assist).",
+    ],
+    missSecond: [
+      "Nice work! Just be a little more thorough next time.",
+      "Kind, but “more thorough” doesn't say what to check (misses Actionable).",
+    ],
+  }),
+  floor({
     id: "g-exec-12",
-    kind: "spot",
     mode: "giving",
-    department: "Executive Suite — Floor of Board Memos",
-    villain: {
-      name: "The Doubt Demon",
-      emoji: "😈",
-      title: "Whisperer of 'Something's Wrong Here'",
-      taunt: "Good feedback? Impossible. There must be a flaw. Find it!",
-    },
-    setup:
-      "An analyst wrote a board memo with excellent analysis, but the recommendation is on page four. Here's the feedback their director gave.",
-    quote:
-      "“Your analysis deserves to land. Could you put the recommendation in the first line and move the methodology to an appendix? Happy to review a draft Friday.”",
-    prompt: SPOT_PROMPT_GIVING,
-    choices: spotChoices("giving", "nailedBoth", {
-      missedFirst:
-        "Look again: it praises the analysis and offers a Friday review. That's Assist: feedback meant to help them succeed.",
-      missedSecond:
-        "Look again: recommendation first line, methodology to an appendix. Those are concrete steps, so it's Actionable.",
-      missedBoth:
-        "This one's a model answer: supportive and offering help (Assist), with two clear edits (Actionable).",
-      nailedBoth:
-        "Right. It's in service of their success with an offer to help (Assist), plus specific edits and a date (Actionable).",
-    }),
-  },
+    department: "Executive Suite",
+    villain: { name: "The Doubt Demon", emoji: "😈", title: "Whisperer of Doubt", taunt: "Something's off..." },
+    setup: "An analyst's board memo has excellent analysis, but the recommendation is hidden on page four.",
+    prompt: "What do you tell them?",
+    best: [
+      "Great analysis. Put the recommendation in the first paragraph so the board sees it.",
+      "It credits their work (Assist) and gives one clear change (Actionable).",
+    ],
+    missFirst: [
+      "Did you even think about the board? Put the recommendation at the top.",
+      "The change is clear, but the sarcastic question isn't help (misses Assist).",
+    ],
+    missSecond: [
+      "Excellent analysis! Maybe just rethink the structure a little?",
+      "Kind, but “rethink the structure” doesn't say what to move (misses Actionable).",
+    ],
+  }),
 ];
 
 // ---------------------------------------------------------------------------------------------
-// RECEIVING FEEDBACK — choose (8)   (r-legal-04 and r-exec-06: the best answer is a reasoned decline)
+// RECEIVING FEEDBACK (12) — Appreciate + Accept or Decline
+// Floors where the best answer thanks them and (partly) declines: r-close-02, r-legal-04,
+// r-exec-06, r-ap-10, r-pm-12.
 // ---------------------------------------------------------------------------------------------
-const RECEIVING_CHOOSE: RegularFloor[] = [
-  {
+const RECEIVING: RegularFloor[] = [
+  floor({
     id: "r-onb-01",
-    kind: "choose",
     mode: "receiving",
-    department: "Onboarding — Floor of Lost New Hires",
-    villain: {
-      name: "The Excuse Engine",
-      emoji: "⚙️",
-      title: "Generator of Infinite 'Buts'",
-      taunt: "Feedback incoming! Deploy excuses! All of them!",
-    },
-    setup:
-      "Your manager says your client onboarding checklist has 60 steps and new clients find it overwhelming. She suggests grouping it into five phases.",
+    department: "Onboarding",
+    villain: { name: "The Excuse Engine", emoji: "⚙️", title: "Maker of Buts", taunt: "Yeah, but..." },
+    setup: "Your manager says your 60-step client checklist is overwhelming. She suggests grouping it into five phases.",
     prompt: "How do you respond?",
-    choices: [
-      {
-        id: "a",
-        text: "“Well, clients never read anything anyway. And I built it in a rush because nobody gave me time.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "Excuses replace any thanks (misses Appreciate), and the idea is brushed off without being weighed (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“Thank you, that's useful. Five phases makes sense. I'll regroup it this week and keep the detailed steps as a linked appendix.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "A clear thank-you (Appreciate) and a considered choice to adopt the idea, with your own tweak to keep the details (Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Oh, totally, thanks! I'll scrap it and rebuild from scratch however you want.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Gracious (Appreciate), but scrapping everything without weighing what works isn't a reasoned choice (misses Accept or Decline).",
-      },
+    best: [
+      "Thanks for telling me. Five phases makes sense, so I'll regroup it by Friday.",
+      "You thank her (Appreciate) and make a clear, reasoned choice (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "Clients just need to read it properly. Fine, I'll split it into phases.",
+      "You decide, but the defensive opener skips any thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks for the feedback! I'll keep it in mind.",
+      "Nice thanks, but “I'll keep it in mind” is not a decision (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-close-02",
-    kind: "choose",
     mode: "receiving",
-    department: "Month-End Close — Floor of Unbalanced Ledgers",
-    villain: {
-      name: "The Bobblehead Baron",
-      emoji: "🪆",
-      title: "Nodder at All Things",
-      taunt: "Just nod! Agree to everything! Thinking is overrated!",
-    },
-    setup:
-      "Your controller reviews your month-end report and says: add variance commentary for anything over 10%, switch to landscape, and rename every tab. You agree with the first two points, but renaming the tabs would break your ERP export.",
-    prompt: "What do you say?",
-    choices: [
-      {
-        id: "a",
-        text: "“Thanks so much! I'll do all three right away.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Nice thank-you (Appreciate), but saying yes to everything without weighing each point skips Accept or Decline.",
-      },
-      {
-        id: "b",
-        text: "“The format is fine. People are used to it.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "No thanks (misses Appreciate), and it dismisses all three points, even the one you agree with (misses Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Thank you for the thorough review! I'll add variance commentary and switch to landscape. I'd keep the tab names, though: our ERP export depends on them.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them (Appreciate), adopt the two useful points, and decline the third with a real reason (Accept or Decline).",
-      },
-      {
-        id: "d",
-        text: "“Variance commentary, sure. Landscape is fine too. But I'm not renaming tabs; the ERP export depends on them.”",
-        correct: false,
-        hits: ["acceptOrDecline"],
-        misses: ["appreciate"],
-        explanation:
-          "You weigh each point and give a real reason (Accept or Decline), but there's no thank-you for the review (misses Appreciate).",
-      },
+    department: "Month-End Close",
+    villain: { name: "The Bobblehead Baron", emoji: "🪆", title: "Nodder at All", taunt: "Just nod!" },
+    setup: "Your controller wants variance notes, a landscape layout, and renamed tabs. Renaming tabs would break your export.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks! I'll add notes and go landscape, but I'll keep the tab names so the export works.",
+      "You thank them (Appreciate) and accept two ideas while declining one with a reason (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "Why are you nitpicking my tabs? I'll do notes and landscape, not the tabs.",
+      "Your choice is sound, but it's defensive with no thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks! I'll do all three right away.",
+      "Renaming tabs breaks your export, so agreeing without weighing it misses Accept or Decline.",
+    ],
+  }),
+  floor({
     id: "r-cs-03",
-    kind: "choose",
     mode: "receiving",
-    department: "Client Success — Floor of Lingering Demos",
-    villain: {
-      name: "The Inbox Inferno",
-      emoji: "🔥",
-      title: "Blazer of ALL-CAPS Subject Lines",
-      taunt: "They yelled first! Fight fire with fire!",
-    },
-    setup:
-      "A client emails: “Your team took FOUR DAYS to answer a simple invoice question. Unacceptable.” Looking into it, the ticket sat in a shared inbox no one owned.",
+    department: "Client Success",
+    villain: { name: "The Inbox Inferno", emoji: "🔥", title: "Blazer of CAPS", taunt: "REPLY ALL!" },
+    setup: "A client says your team took four days to answer a simple question. The email sat in an inbox nobody owned.",
     prompt: "How do you reply?",
-    choices: [
-      {
-        id: "a",
-        text: "“Thank you for telling us directly. You're right, four days is too long. We've assigned an owner to that inbox and will reply within one business day.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them despite the heat (Appreciate) and act on the valid point with a specific change (Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“To be fair, your question came in on a Friday before a long weekend.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "Defending instead of thanking (misses Appreciate), and the real issue goes unexamined (misses Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Thanks for the feedback! We value all input.” (Nothing changes.)",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "A thank-you (Appreciate), but no reflection or decision about the slow-response problem (misses Accept or Decline).",
-      },
+    best: [
+      "Thank you for flagging this. We'll assign an owner so you always hear back within a day.",
+      "You thank them (Appreciate) and commit to a specific fix (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "That was a shared-inbox issue, not us. We'll assign an owner going forward.",
+      "You act on it, but making excuses instead of thanking them misses Appreciate.",
+    ],
+    missSecond: [
+      "Thank you for your feedback! We value you as a client.",
+      "Polite thanks, but no decision about what you'll change (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-legal-04",
-    kind: "choose",
     mode: "receiving",
-    department: "Legal & Contracts — Floor of Fine Print",
-    villain: {
-      name: "Lady Yes-to-Everything",
-      emoji: "🙋",
-      title: "Collector of Unweighed Advice",
-      taunt: "A peer suggested it, so you MUST do it. Those are the rules!",
-    },
-    setup:
-      "A peer suggests attaching a 10-page legal glossary to every statement of work. You weigh it: clients already complain SOWs are too long, and most terms are defined in the master agreement.",
-    prompt: "What's your best response?",
-    choices: [
-      {
-        id: "a",
-        text: "“Sure, thanks! I'll add it to every SOW from now on.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Grateful (Appreciate), but you're accepting something you have good reasons to doubt, without weighing it (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“Thanks for thinking about clarity. I'm going to pass on the glossary since the MSA covers those terms, but I'll add a one-line link to it in each SOW.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them (Appreciate) and make a reasoned decline, explaining why and keeping what's useful (Accept or Decline). Declining is allowed!",
-      },
-      {
-        id: "c",
-        text: "“No. SOWs are long enough already.”",
-        correct: false,
-        hits: ["acceptOrDecline"],
-        misses: ["appreciate"],
-        explanation:
-          "There's a reason behind the decline (Accept or Decline), but no thank-you for the input (misses Appreciate).",
-      },
-      {
-        id: "d",
-        text: "“Thanks so much for the idea! I'll pass, though.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "A real thank-you (Appreciate), but a quick “I'll pass” with no reasoning isn't a considered decision (misses Accept or Decline).",
-      },
+    department: "Legal & Contracts",
+    villain: { name: "Lady Yes-to-Everything", emoji: "🙋", title: "Taker of All Advice", taunt: "Say yes to all!" },
+    setup: "A peer suggests adding a 10-page glossary to every contract. Clients already say your contracts are too long.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks for the idea. Clients already find contracts long, so I'll skip the glossary.",
+      "You thank them (Appreciate) and decline with a clear reason, which is allowed (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "That's a terrible idea. Our contracts are long enough already.",
+      "Declining is fine, but calling it terrible skips any thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks, great idea! I'll add it to every contract.",
+      "Adding pages clients don't want, without weighing it, misses Accept or Decline.",
+    ],
+  }),
+  floor({
     id: "r-train-05",
-    kind: "choose",
     mode: "receiving",
-    department: "Training — Floor of Sleepy Workshops",
-    villain: {
-      name: "Professor Pout",
-      emoji: "😤",
-      title: "Sulker of the Survey Results",
-      taunt: "Low score? Clearly the attendees are wrong.",
-    },
-    setup:
-      "Survey results from your Excel workshop say you go too fast and need more hands-on practice. It stings: you spent weeks on those slides.",
-    prompt: "What do you tell the training coordinator who shared the results?",
-    choices: [
-      {
-        id: "a",
-        text: "“Some people just aren't Excel people. I can't slow down for everyone.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "No gratitude (misses Appreciate), and blaming the attendees means you never weigh the feedback (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“Thank you for passing these on, even if they stung. I'll cut five slides and add two practice exercises for the next session.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them even when it's uncomfortable (Appreciate) and decide on concrete changes after weighing it (Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Thanks! I'll redo the whole workshop and double its length so nobody's ever lost.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Grateful (Appreciate), but overcorrecting without weighing it isn't a thoughtful choice (misses Accept or Decline).",
-      },
+    department: "Training",
+    villain: { name: "Professor Pout", emoji: "😤", title: "Sulker of Surveys", taunt: "Sulk about it!" },
+    setup: "Your workshop survey says you go too fast and need more hands-on practice. It stings.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks, everyone. That's fair; next time I'll slow down and add two practice breaks.",
+      "You thank them (Appreciate) and choose specific changes (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "They just didn't prepare. Fine, I'll add a practice break.",
+      "You make a change, but blaming them instead of thanking them misses Appreciate.",
+    ],
+    missSecond: [
+      "Thanks for the feedback, everyone! Really appreciate it.",
+      "Warm thanks, but you never say what you'll do (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-exec-06",
-    kind: "choose",
     mode: "receiving",
-    department: "Executive Suite — Floor of Board Memos",
-    villain: {
-      name: "The Shiny Object Sorcerer",
-      emoji: "✨",
-      title: "Conjurer of Mid-Quarter Migrations",
-      taunt: "A VP said it! Drop everything and switch tools NOW!",
-    },
-    setup:
-      "A VP suggests moving your client reporting to a new BI tool right away. You like the tool, but switching mid-close would risk errors in three client reports due Friday.",
-    prompt: "How do you respond?",
-    choices: [
-      {
-        id: "a",
-        text: "“Absolutely, thank you! I'll migrate everything this week.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Grateful (Appreciate), but agreeing without weighing the close-week risk isn't a reasoned choice (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“We don't have time for new tools. Maybe never.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "No thanks (misses Appreciate), and a blanket “never” dismisses the idea without weighing it (misses Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Thank you, I like that tool. I'll hold off until after Friday's reports to avoid errors, then pilot it on one client next month.”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them (Appreciate), decline the timing for a clear reason, and choose your own path forward (Accept or Decline).",
-      },
+    department: "Executive Suite",
+    villain: { name: "The Shiny Object Sorcerer", emoji: "✨", title: "Conjurer of Switches", taunt: "Switch it all now!" },
+    setup: "A VP wants your reports moved to a new tool right now. Switching this week risks errors in three reports due Friday.",
+    prompt: "What do you tell the VP?",
+    best: [
+      "Thanks, I like the tool. I'll switch after Friday's reports so we avoid errors.",
+      "You thank them (Appreciate) and choose a better timing with a reason (Accept or Decline).",
     ],
-  },
-  {
+    missFirst: [
+      "Now? In the middle of close? No way. Maybe after Friday.",
+      "The timing is sensible, but the brush-off has no thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks! I'll switch everything over today.",
+      "Rushing into a switch that risks Friday's reports skips weighing it (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-sales-07",
-    kind: "choose",
     mode: "receiving",
-    department: "Sales — Floor of Pipeline Peril",
-    villain: {
-      name: "Sir Shrugs-a-Lot",
-      emoji: "🤷",
-      title: "Knight of the Non-Response",
-      taunt: "Shrug it off. If you don't think about it, it isn't real!",
-    },
-    setup:
-      "After shadowing your discovery call, a senior rep says you interrupted the prospect three times while they described their invoice backlog. It's awkward to hear.",
-    prompt: "What do you say?",
-    choices: [
-      {
-        id: "a",
-        text: "“Huh. Okay.” (You move on to the next agenda item.)",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "No thank-you (misses Appreciate), and shrugging it off means you never weigh the feedback (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“I was just trying to show I understood their problem. That's what good reps do.”",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "Defending instead of thanking (misses Appreciate), and justifying shuts down any real reflection (misses Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“Thanks, I didn't notice that. I'll try pausing two seconds before I speak on my next three calls. Can you listen in on one?”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You thank them for an awkward truth (Appreciate) and choose a specific way to act on it (Accept or Decline).",
-      },
-      {
-        id: "d",
-        text: "“Thank you! You're right, I'll stop talking on calls and let you lead from now on.”",
-        correct: false,
-        hits: ["appreciate"],
-        misses: ["acceptOrDecline"],
-        explanation:
-          "Grateful (Appreciate), but overreacting instead of weighing what the feedback actually asked for misses Accept or Decline.",
-      },
-    ],
-  },
-  {
-    id: "r-mkt-08",
-    kind: "choose",
-    mode: "receiving",
-    department: "Marketing — Floor of Forgotten Calls-to-Action",
-    villain: {
-      name: "The Eye-Roll Elemental",
-      emoji: "🙄",
-      title: "Spirit of the Silent Sigh",
-      taunt: "Roll your eyes. Say 'fine.' Change nothing. Perfect.",
-    },
-    setup:
-      "A designer says your webinar slides use five different fonts and look inconsistent next to the brand guide. You suspect they're right, though you liked the variety.",
+    department: "Sales",
+    villain: { name: "Sir Shrugs-a-Lot", emoji: "🤷", title: "Knight of Meh", taunt: "Shrug it off!" },
+    setup: "After your sales call, a senior rep says you interrupted the client three times. It's awkward to hear.",
     prompt: "How do you respond?",
-    choices: [
-      {
-        id: "a",
-        text: "“Fine. Whatever.” (Eye-roll included.)",
-        correct: false,
-        hits: [],
-        misses: ["appreciate", "acceptOrDecline"],
-        explanation:
-          "An eye-roll isn't gratitude (misses Appreciate), and “whatever” skips any real decision (misses Accept or Decline).",
-      },
-      {
-        id: "b",
-        text: "“Thanks for catching that, you're right. I'll switch to our two brand fonts, but keep the title slide's display font since it's the webinar theme. OK?”",
-        correct: true,
-        hits: ["appreciate", "acceptOrDecline"],
-        misses: [],
-        explanation:
-          "You say thank you (Appreciate), accept the core point, and make your own reasoned call on one exception (Accept or Decline).",
-      },
-      {
-        id: "c",
-        text: "“I picked those fonts on purpose. Variety keeps people awake, so I'm keeping them.”",
-        correct: false,
-        hits: ["acceptOrDecline"],
-        misses: ["appreciate"],
-        explanation:
-          "You did give a reason (Accept or Decline), but skipping any thanks makes it sound defensive (misses Appreciate).",
-      },
+    best: [
+      "Thanks for catching that. You're right; I'll pause before I speak on the next call.",
+      "You thank them (Appreciate) and decide on a specific change (Accept or Decline).",
     ],
-  },
-];
-
-// ---------------------------------------------------------------------------------------------
-// RECEIVING FEEDBACK — spot (4)
-// ---------------------------------------------------------------------------------------------
-const RECEIVING_SPOT: RegularFloor[] = [
-  {
+    missFirst: [
+      "I was just keeping the call moving. But okay, I'll interrupt less.",
+      "You make a choice, but the excuse replaces any thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks for joining my call! See you at the next one.",
+      "Friendly, but you never respond to the feedback itself (misses Accept or Decline).",
+    ],
+  }),
+  floor({
+    id: "r-mkt-08",
+    mode: "receiving",
+    department: "Marketing",
+    villain: { name: "The Eye-Roll Elemental", emoji: "🙄", title: "Spirit of Sighs", taunt: "Roll your eyes!" },
+    setup: "A designer says your webinar slides use five different fonts and don't match the brand guide.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks for the catch. You're right; I'll switch to the two brand fonts before Thursday.",
+      "You thank them (Appreciate) and decide on a clear fix (Accept or Decline).",
+    ],
+    missFirst: [
+      "Fonts are a matter of taste. Fine, I'll use the brand ones.",
+      "You decide, but brushing them off skips any thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks! I'll keep that in mind someday.",
+      "Polite, but “someday” is not a decision (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-mkt-09",
-    kind: "spot",
     mode: "receiving",
-    department: "Marketing — Campaign Command Floor",
-    villain: {
-      name: "Captain Defensive",
-      emoji: "🧱",
-      title: "Commander of the Comment Wall",
-      taunt: "Shields up! Every suggestion is an attack!",
-    },
-    setup:
-      "A teammate suggests your email subject lines are too long and might be hurting open rates. Here's how you replied.",
-    quote:
-      "“Well, nobody complained before. But fine, I'll A/B test a short version on the next send and keep whichever gets more opens.”",
-    prompt: SPOT_PROMPT_RECEIVING,
-    choices: spotChoices("receiving", "missedFirst", {
-      missedFirst:
-        "Right. Testing it is a smart, reasoned choice (Accept or Decline), but “nobody complained before” replaces a thank-you (misses Appreciate).",
-      missedSecond:
-        "Not this one. Running an A/B test is a thoughtful way to weigh the idea, so Accept or Decline is there.",
-      missedBoth:
-        "Half right. No thanks (misses Appreciate), but the A/B test is a genuine, reasoned decision.",
-      nailedBoth:
-        "Close, but there's no thank-you. A defensive opener misses Appreciate even when the follow-through is good.",
-    }),
-  },
-  {
+    department: "Marketing",
+    villain: { name: "Captain Defensive", emoji: "🧱", title: "Builder of Walls", taunt: "Defend! Defend!" },
+    setup: "A teammate says your email subject lines are too long and may be hurting open rates.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks for the tip. I'll test shorter subject lines on the next two emails.",
+      "You thank them (Appreciate) and choose a concrete way to try it (Accept or Decline).",
+    ],
+    missFirst: [
+      "My subject lines are fine. I'll test short ones, I guess.",
+      "You try it, but the defensive tone has no thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks for the input, I really appreciate it!",
+      "Warm thanks, but you never decide what to do (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-ap-10",
-    kind: "spot",
     mode: "receiving",
-    department: "Accounts Payable — Floor of Endless Invoices",
-    villain: {
-      name: "The People-Pleaser Phantom",
-      emoji: "🫥",
-      title: "Haunter of the Overloaded To-Do List",
-      taunt: "Say yes to everything. Sleep is for people who say no.",
-    },
-    setup:
-      "Your AP lead gives you five suggestions on your invoice workflow, from file naming to daily status emails. Some fit, some would add hours of work. Here's your reply.",
-    quote:
-      "“Thank you so much, this is amazing! I'll do all five, starting today. Daily emails, new names, new folders, all of it!”",
-    prompt: SPOT_PROMPT_RECEIVING,
-    choices: spotChoices("receiving", "missedSecond", {
-      missedFirst:
-        "Not this one. “Thank you so much” is plenty of Appreciate. The issue is what happens next.",
-      missedSecond:
-        "Right. Lots of thanks (Appreciate), but taking on all five without weighing which ones add value skips Accept or Decline.",
-      missedBoth:
-        "Half right. Saying yes to everything misses Accept or Decline, but the thank-you is genuine.",
-      nailedBoth:
-        "Enthusiasm isn't evaluation. Accept or Decline means weighing each idea and choosing, not agreeing to all of it.",
-    }),
-  },
-  {
+    department: "Accounts Payable",
+    villain: { name: "The People-Pleaser Phantom", emoji: "🫥", title: "Taker of All Tasks", taunt: "Never say no!" },
+    setup: "Your AP lead gives you five tips for your invoice process. Three fit well; two would add hours of work each week.",
+    prompt: "How do you respond?",
+    best: [
+      "Thank you! I'll use the first three, but skip the other two since they'd add hours.",
+      "You thank them (Appreciate) and accept some, decline some, with a reason (Accept or Decline).",
+    ],
+    missFirst: [
+      "Five tips? I'm already swamped. I'll do three, that's it.",
+      "Your choice is fair, but the grumbling has no thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thank you! I'll start all five today.",
+      "Taking on hours of extra work without weighing it misses Accept or Decline.",
+    ],
+  }),
+  floor({
     id: "r-data-11",
-    kind: "spot",
     mode: "receiving",
-    department: "Data & Reporting — Floor of Broken Formulas",
-    villain: {
-      name: "The Stonewall Sentinel",
-      emoji: "🗿",
-      title: "Guardian of 'Works On My Machine'",
-      taunt: "Your dashboard is perfect. Feedback bounces right off!",
-    },
-    setup:
-      "A client success manager says your dashboard's filters confuse clients and asks if there's a simpler view. Here's how you reacted.",
-    quote: "“Whatever. It's my dashboard and it works fine for me.”",
-    prompt: SPOT_PROMPT_RECEIVING,
-    choices: spotChoices("receiving", "missedBoth", {
-      missedFirst:
-        "True, there's no thank-you, but there's also no weighing of the idea. “Whatever” dismisses it outright.",
-      missedSecond:
-        "True, it's dismissed without reflection, but there's also no thank-you, so Appreciate is missing too.",
-      missedBoth:
-        "Right. No thanks (misses Appreciate), and it brushes the idea off without weighing it (misses Accept or Decline).",
-      nailedBoth:
-        "Not quite. Declining is allowed, but it needs a thank-you and real reasoning. “Works fine for me” is neither.",
-    }),
-  },
-  {
+    department: "Data & Reporting",
+    villain: { name: "The Stonewall Sentinel", emoji: "🗿", title: "Works On My Machine", taunt: "Works for me!" },
+    setup: "A coworker says clients find your dashboard filters confusing and asks if there could be a simpler view.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks for passing that on. I'll add a simple default view and keep the full filters too.",
+      "You thank them (Appreciate) and choose a clear fix (Accept or Decline).",
+    ],
+    missFirst: [
+      "It works fine for me. I'll add a simple view if I have to.",
+      "You act on it, but the brush-off has no thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thank you for the feedback! Clients are so important.",
+      "Polite, but you never say what you'll do (misses Accept or Decline).",
+    ],
+  }),
+  floor({
     id: "r-pm-12",
-    kind: "spot",
     mode: "receiving",
-    department: "Project Management — Floor of Slipping Gantt Charts",
-    villain: {
-      name: "The Guilt Goblin",
-      emoji: "👺",
-      title: "Whisperer of 'You Can't Say No'",
-      taunt: "Declining feedback? How rude! Surely that fails...",
-    },
-    setup:
-      "A colleague suggests you switch your project team to daily stand-ups. Your team spans three time zones. Here's how you responded.",
-    quote:
-      "“Thanks for the suggestion, really. I thought it over, and with three time zones I'll keep stand-ups twice a week, but I'll add a shared async update board.”",
-    prompt: SPOT_PROMPT_RECEIVING,
-    choices: spotChoices("receiving", "nailedBoth", {
-      missedFirst:
-        "Look again: “Thanks for the suggestion, really” is a clear thank-you. Appreciate is there.",
-      missedSecond:
-        "Declining isn't failing. They weighed the idea, explained why, and chose an alternative. That IS Accept or Decline.",
-      missedBoth:
-        "This is a model reaction: a thank-you plus a reasoned, communicated decline with an alternative.",
-      nailedBoth:
-        "Right. A sincere thanks (Appreciate) and a reflective, reasoned choice to decline with an alternative (Accept or Decline).",
-    }),
-  },
+    department: "Project Management",
+    villain: { name: "The Guilt Goblin", emoji: "👺", title: "No Means Yes", taunt: "You can't say no!" },
+    setup: "A colleague suggests daily video stand-ups for your team. Your team works across three time zones.",
+    prompt: "How do you respond?",
+    best: [
+      "Thanks! Daily calls won't work across time zones, so I'll try daily chat updates instead.",
+      "You thank them (Appreciate) and adapt the idea with a clear reason (Accept or Decline).",
+    ],
+    missFirst: [
+      "Daily calls across three time zones? Obviously not. We'll stay weekly.",
+      "Declining is fine, but “obviously not” skips any thanks (misses Appreciate).",
+    ],
+    missSecond: [
+      "Thanks! Daily calls for everyone, starting tomorrow.",
+      "Ignoring the time-zone problem means you didn't weigh it (misses Accept or Decline).",
+    ],
+  }),
 ];
 
-export const REGULAR_FLOORS: RegularFloor[] = [
-  ...GIVING_CHOOSE,
-  ...GIVING_SPOT,
-  ...RECEIVING_CHOOSE,
-  ...RECEIVING_SPOT,
-];
+export const REGULAR_FLOORS: RegularFloor[] = [...GIVING, ...RECEIVING];
 
 // ---------------------------------------------------------------------------------------------
 // BOSS FLOORS (2 receiving, 2 giving) — the player writes their own words
 // ---------------------------------------------------------------------------------------------
+const BOSS_PROMPT = "Write what you'd say.";
+
 export const BOSS_FLOORS_CONTENT: BossFloor[] = [
   {
     id: "boss-r-review",
     kind: "boss",
     mode: "receiving",
-    department: "Executive Suite — Hall of the Annual Review",
-    villain: {
-      name: "The Doom Director",
-      emoji: "🦹",
-      title: "Overlord of the Performance Review",
-      taunt: "Defend yourself or crumble. Those are your ONLY options!",
-    },
+    department: "Executive Suite",
+    villain: { name: "The Doom Director", emoji: "🦹", title: "Overlord of Reviews", taunt: "Defend or crumble!" },
     setup:
-      "In your annual review, your director says your client presentations run long and suggests cutting every deck to five slides. The point about length stings because it's partly true, but you think five slides is too few for complex audit findings.",
-    prompt:
-      "Write what you'd say back to your director (2-4 sentences). Show that you Appreciate the feedback, then Accept or Decline each part with your reasoning.",
-    placeholder: "Thank you for... You're right that... I'll... but I'd like to keep... because...",
+      "Your director says your client presentations run long and wants five-slide decks. Length is fair, but five slides is too few for audits.",
+    prompt: BOSS_PROMPT,
+    placeholder: "Thank you for...",
     exemplar:
-      "Thank you for being direct with me; I'd rather hear it now than lose a client's attention. You're right that my presentations run long, so I'll cap them at 20 minutes and move the detail into an appendix. I'm going to keep more than five slides for complex audits, because clients need the reconciliation walkthrough, but I'll trim everything else and check in with you after the next one.",
+      "Thank you for being direct. You're right they run long, so I'll cap them at 20 minutes. I'll keep more than five slides for audits, since clients need the walkthrough.",
   },
   {
     id: "boss-r-client",
     kind: "boss",
     mode: "receiving",
-    department: "Client Success — The Escalation Chamber",
-    villain: {
-      name: "The Board of Dread",
-      emoji: "🏛️",
-      title: "Five Executives, Zero Patience",
-      taunt: "The client is furious. Grovel, or fight. Pick one!",
-    },
+    department: "Client Success",
+    villain: { name: "The Board of Dread", emoji: "🏛️", title: "Zero Patience", taunt: "Grovel or fight!" },
     setup:
-      "A client's CFO emails: “Your AP automation rollout is a mess. Approvals are stuck, and you should go back to our old paper process.” You know approvals stalled because one approver wasn't set up, but returning to paper would undo months of progress.",
-    prompt:
-      "Write your reply to the CFO (2-4 sentences). Appreciate the feedback, then Accept or Decline: what will you act on, and what will you respectfully decline, and why?",
-    placeholder: "Thank you for raising this... You're right that... I'd recommend we don't... because...",
+      "A client's CFO says your rollout is a mess and wants to go back to paper. One approver wasn't set up, and paper would undo months of progress.",
+    prompt: BOSS_PROMPT,
+    placeholder: "Thank you for...",
     exemplar:
-      "Thank you for flagging this so clearly; stuck approvals are a real problem and I'm glad you told us. You're right that the rollout missed something: one approver wasn't set up, and we'll fix that today and review every approval path with your team by Friday. I'd recommend we don't return to paper, because it would undo the time savings you've already gained, but if approvals aren't flowing by next week I'll set up a call to revisit.",
+      "Thank you for flagging this. You're right, one approver wasn't set up, and we'll fix it today. I'd recommend we don't go back to paper, since it would undo your time savings.",
   },
   {
     id: "boss-g-handoff",
     kind: "boss",
     mode: "giving",
-    department: "Project Management — The War Room",
-    villain: {
-      name: "The Micromanager Minotaur",
-      emoji: "🐂",
-      title: "Lord of the Labyrinth of Blame",
-      taunt: "Just tell them they messed up. Loudly. In front of everyone!",
-    },
+    department: "Project Management",
+    villain: { name: "The Micromanager Minotaur", emoji: "🐂", title: "Lord of Blame", taunt: "Shout it loud!" },
     setup:
-      "Priya, a new analyst, handed off a client file with no notes, and you spent an hour figuring out where things stood. She's eager and capable, but this is her third handoff without notes, and the client deadline is Monday.",
-    prompt:
-      "Write the feedback you'd give Priya (2-4 sentences). Make it Assist (helpful, not venting) and Actionable (clear, concrete next steps).",
-    placeholder: "Hi Priya, I want to help your handoffs... Could you... I'm happy to...",
+      "Priya, a capable new analyst, handed off a client file with no notes for the third time. You lost an hour, and the deadline is Monday.",
+    prompt: BOSS_PROMPT,
+    placeholder: "Hi Priya...",
     exemplar:
-      "Hi Priya, your work on the Henderson file was solid, and I want your handoffs to be just as strong. When I picked it up, I couldn't tell what was done, so it took me an hour to catch up. For your next handoff, could you add three lines at the top: what's finished, what's pending, and any client quirks? I'm happy to walk through one together on Thursday.",
+      "Hi Priya, your work on this file was solid. For handoffs, could you add three lines up top: what's done, what's pending, and any client quirks? Happy to walk through one Thursday.",
   },
   {
     id: "boss-g-rooftop",
     kind: "boss",
     mode: "giving",
-    department: "The Rooftop — Lair of the Doom Director",
-    villain: {
-      name: "The Doom Director",
-      emoji: "🦹",
-      title: "Ruler of 'Just Do Better'",
-      taunt: "Feedback should be vague and angry. Prove me wrong, hero!",
-    },
+    department: "The Rooftop",
+    villain: { name: "The Doom Director", emoji: "🦹", title: "Ruler of Do Better", taunt: "Prove me wrong!" },
     setup:
-      "Your peer Tom presented the quarterly close results to the leadership team. His numbers were right, but he read every slide word for word, skipped the cash-flow risk entirely, and ran 15 minutes over. He asks you for honest feedback.",
-    prompt:
-      "Write the feedback you'd give Tom (2-4 sentences). Make it Assist (helpful, not venting) and Actionable (clear, concrete next steps).",
-    placeholder: "Thanks for asking, Tom. Your numbers were... Next time, could you... I can help by...",
+      "Tom's quarterly numbers were right, but he read every slide aloud, skipped the cash-flow risk, and ran 15 minutes over. He asks for feedback.",
+    prompt: BOSS_PROMPT,
+    placeholder: "Thanks for asking, Tom...",
     exemplar:
-      "Thanks for asking, Tom; your numbers were airtight, and I want leadership to see that. Next time, could you open with the three key takeaways, including the cash-flow risk, and keep each slide to one talking point instead of reading it? Aim for 20 minutes, and I'm happy to do a timed run-through with you the day before.",
+      "Your numbers were airtight, Tom. Next time, open with three takeaways, including the cash-flow risk, and aim for 20 minutes. I'm happy to do a timed run-through with you.",
   },
 ];

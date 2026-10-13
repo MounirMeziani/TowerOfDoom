@@ -25,27 +25,27 @@ export function JoinPanel({ code, sessionName, large = false }: { code: string; 
   ));
 
   return (
-    <Panel as="section" aria-label="How to join" className="flex flex-col items-center gap-4 text-center">
-      <p className={`font-pixel uppercase text-muted ${large ? "text-xs xl:text-sm" : "text-[0.625rem]"}`}>
-        {large ? "Join the climb" : "Late? Still welcome"}
-      </p>
-      <p className="max-w-full truncate text-sm text-muted xl:text-base" title={sessionName}>
-        {sessionName}
-      </p>
+    <Panel
+      as="section"
+      aria-label={`Join ${sessionName}`}
+      className={`@container flex flex-col items-center gap-4 text-center ${large ? "justify-center" : ""}`.trim()}
+    >
       <div className="flex flex-col items-center gap-1">
-        <span className="font-pixel text-[0.625rem] uppercase text-muted">Code</span>
         <span
           className={`font-pixel leading-none tracking-[0.12em] text-gold drop-shadow-[0_0_24px_rgb(255_207_74/0.35)] ${
-            large ? "text-[clamp(2.25rem,7vw,6.5rem)]" : "text-2xl xl:text-3xl"
+            large ? "" : "text-2xl xl:text-3xl"
           }`}
+          style={large ? { fontSize: `min(6.5rem, ${(86 / (code.length * 1.14)).toFixed(1)}cqi)` } : undefined}
           aria-label={`Session code ${code.split("").join(" ")}`}
         >
           {code}
         </span>
       </div>
+      {/* Large: grow to the column width, capped so code + QR + URL fit the stage height.
+          min(70vh,52rem) must match STAGE_LOBBY in HostSessionView.tsx; 15rem = code, URL, gaps, padding. */}
       <div
         className={`rounded-lg border-4 border-ember bg-white p-3 shadow-[0_0_40px_-10px_var(--ember)] ${
-          large ? "w-[min(22rem,70vw)]" : "w-40 xl:w-48"
+          large ? "w-[min(100%,30rem,calc(min(70vh,52rem)-15rem))]" : "w-40 xl:w-48"
         }`}
       >
         {joinUrl ? (
@@ -66,7 +66,6 @@ export function JoinPanel({ code, sessionName, large = false }: { code: string; 
       <p className={`max-w-full text-text [overflow-wrap:anywhere] ${large ? "text-base xl:text-xl" : "text-xs xl:text-sm"}`}>
         {displayUrl ? (
           <>
-            Scan or visit{" "}
             {large ? (
               <span className="font-semibold text-ember-2">
                 {hostSegments}

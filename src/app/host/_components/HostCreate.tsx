@@ -39,22 +39,13 @@ export function HostCreate() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <p className="font-pixel text-[0.625rem] uppercase text-ember">Admin</p>
-        <h1 className="font-pixel text-base leading-relaxed text-text sm:text-xl">Admin: run a workshop session</h1>
-        <p className="max-w-prose text-muted">
-          Create a session, put it on the projector, and let your team scan in with their phones. You control when the
-          climb begins.
-        </p>
-      </header>
-
       <Panel as="section" aria-labelledby={`${nameId}-h`}>
-        <h2 id={`${nameId}-h`} className="mb-4 font-pixel text-xs uppercase text-ember-2">
+        <h1 id={`${nameId}-h`} className="mb-4 font-pixel text-sm uppercase text-ember-2 sm:text-base">
           New session
-        </h2>
+        </h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="flex flex-col gap-2">
-            <label htmlFor={nameId} className="font-pixel text-[0.625rem] uppercase text-muted">
+            <label htmlFor={nameId} className="sr-only">
               Session name
             </label>
             <input
@@ -63,7 +54,7 @@ export function HostCreate() {
               value={name}
               onChange={(e) => setName(e.target.value.slice(0, MAX_NAME))}
               maxLength={MAX_NAME}
-              placeholder="e.g. Finance Team Workshop, Oct 12"
+              placeholder="Name"
               autoComplete="off"
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? errorId : undefined}
@@ -71,36 +62,17 @@ export function HostCreate() {
             />
           </div>
           {error && (
-            <p id={errorId} role="alert" className="text-sm text-bad">
-              {error}
+            <p id={errorId} role="alert" title={error} className="text-sm text-bad">
+              <span aria-hidden="true">✗</span>
+              <span className="sr-only">{error}</span>
             </p>
           )}
           <div>
             <Button type="submit" size="lg" disabled={busy} aria-busy={busy || undefined}>
-              {busy ? "Opening the tower..." : "Create session"}
+              {busy ? "⏳" : "Create"}
             </Button>
           </div>
         </form>
-      </Panel>
-
-      <Panel as="section" aria-label="How it works">
-        <ol className="grid gap-3 text-sm text-muted sm:grid-cols-2">
-          {[
-            ["1", "Create a session. You become its admin on this device."],
-            ["2", "Put the session page on the projector. It shows a join code and a QR code."],
-            ["3", "Players scan in, create a hero, and wait in the lobby."],
-            ["4", "Press Start the Climb. Everyone starts together, and the race and team mastery update live."],
-          ].map(([n, text]) => (
-            <li key={n} className="flex gap-3">
-              <span className="font-pixel text-xs text-ember">{n}</span>
-              <span>{text}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 text-xs text-muted">
-          Running the controls from another device? Use <strong className="text-text">Copy admin link</strong> on the
-          session page and open it there.
-        </p>
       </Panel>
 
       <HostedSessions />
@@ -142,7 +114,7 @@ function HostedSessions() {
   return (
     <Panel as="section" aria-labelledby="hosted-sessions-h">
       <h2 id="hosted-sessions-h" className="mb-4 font-pixel text-xs uppercase text-ember-2">
-        Your sessions
+        Sessions
       </h2>
       <ul className="flex flex-col gap-2">
         {ordered.map((code) => {
@@ -157,17 +129,19 @@ function HostedSessions() {
                 className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded hover:text-ember-2"
               >
                 <span className="font-pixel text-xs text-gold">{code}</span>
-                <span className="truncate text-sm text-text">{row?.name ?? (rows ? "Session not found" : "")}</span>
+                <span className="truncate text-sm text-text">{row?.name ?? (rows ? "?" : "")}</span>
               </Link>
               {row && <StatusPill status={row.status} />}
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm(`Forget admin access to ${code} on this device?`)) forgetHostKey(code);
+                  if (window.confirm(`Forget ${code}?`)) forgetHostKey(code);
                 }}
-                className="min-h-11 rounded px-2 text-xs text-muted hover:text-bad"
+                aria-label={`Forget ${code}`}
+                title="Forget"
+                className="min-h-11 min-w-11 rounded px-2 text-base text-muted hover:text-bad"
               >
-                Forget
+                ✕
               </button>
             </li>
           );

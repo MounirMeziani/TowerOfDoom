@@ -43,14 +43,13 @@ export default async function HostSessionPage({ params, searchParams }: { params
     return (
       <PageShell>
         <Panel className="flex flex-col items-start gap-4">
-          <p className="font-pixel text-[0.625rem] uppercase text-bad">404 · Floor not found</p>
-          <h1 className="font-pixel text-base leading-relaxed sm:text-xl">No session with that code</h1>
-          <p className="text-muted">
-            The code <span className="font-pixel text-xs text-gold">{(code ?? rawCode).slice(0, 16)}</span> doesn&apos;t
-            match any workshop session. Double-check it, or start a new one.
-          </p>
+          <h1 className="font-pixel text-base leading-relaxed sm:text-xl">
+            <span aria-hidden="true">❓ </span>
+            <span className="sr-only">No session </span>
+            <span className="text-gold">{(code ?? rawCode).slice(0, 16)}</span>
+          </h1>
           <Button href="/host" size="lg">
-            Create a session
+            New session
           </Button>
         </Panel>
       </PageShell>

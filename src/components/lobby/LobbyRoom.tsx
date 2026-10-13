@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { getHero } from "@/lib/characters";
 import { useLobbyPresence, useSessionStatus } from "@/lib/lobby";
 import { getHostKey, getPlayer, normalizeSessionCode } from "@/lib/player";
+import { useMode2D, useWebGLSupport } from "@/lib/three/support";
 import type { LobbyPresence, Player, SessionStatus } from "@/lib/types";
 import { CharacterCreator } from "@/components/character/CharacterCreator";
+import { SceneBoundary } from "@/components/climb3d/SceneBoundary";
 import { HeroCard } from "@/components/character/HeroCard";
 import { Button } from "@/components/ui/Button";
 import { PageShell } from "@/components/ui/PageShell";
@@ -14,7 +17,20 @@ import { Panel } from "@/components/ui/Panel";
 import { ClimbCountdown } from "./ClimbCountdown";
 import { LobbyPlayerGrid } from "./LobbyPlayerGrid";
 import { PulsingTower } from "./PulsingTower";
-import { TipCarousel } from "./TipCarousel";
+
+// Three.js stays out of this route's main bundle: the 3D scene is client-only and loaded on demand.
+const Lobby3D = dynamic(() => import("@/components/lobby3d/Lobby3D"), {
+  ssr: false,
+  loading: () => <FullLoader />,
+});
+
+function FullLoader() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-bg" role="status" aria-label="Loading">
+      <PulsingTower />
+    </div>
+  );
+}
 
 /* ---- localStorage-backed player snapshot (hydration-safe) ---- */
 
@@ -123,7 +139,14 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
   const waiting = ready && !editing && status === "lobby";
   useWakeLock(waiting);
 
-  /* ---- Render states ---- */
+  const webgl = useWebGLSupport();
+  const [mode2d, setMode2d] = useMode2D();
+  // A crashed 3D scene (chunk load, WebGL renderer, render error) drops to 2D for this visit only,
+  // without saving the 2D preference.
+  const [sceneFailed, setSceneFailed] = useState(false);
+  const use3D = webgl === true && !mode2d && !sceneFailed;
+
+  /* ---- Render states (minimal text: icons, numbers, 1-2 word labels) ---- */
 
   if (!code || notFound) {
     return (
@@ -132,14 +155,13 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
           <p className="text-5xl" aria-hidden="true">
             🕳️
           </p>
-          <h1 className="font-pixel text-sm leading-relaxed text-ember sm:text-base">That session doesn&apos;t exist</h1>
-          <p className="text-muted">
-            We couldn&apos;t find a tower with the code{" "}
-            <span className="font-pixel text-xs text-text">{code ?? rawCode.slice(0, 12).toUpperCase()}</span>. Double-check the
-            code on the big screen, or climb solo.
-          </p>
+          <h1 className="font-pixel text-sm leading-relaxed text-ember sm:text-base">
+            <span className="sr-only">No session </span>
+            {code ?? rawCode.slice(0, 12).toUpperCase()}
+            <span aria-hidden="true"> ✗</span>
+          </h1>
           <Button href="/" size="lg">
-            Back to the entrance
+            Home
           </Button>
         </Panel>
       </PageShell>
@@ -153,13 +175,11 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
           <p className="text-5xl" aria-hidden="true">
             🏁
           </p>
-          <h1 className="font-pixel text-sm leading-relaxed text-ember sm:text-base">This session has ended</h1>
-          <p className="text-muted">
-            {session?.name ? <>&ldquo;{session.name}&rdquo; is over. </> : null}See how everyone did on the leaderboard.
-          </p>
+          <h1 className="font-pixel text-sm leading-relaxed text-ember sm:text-base">Ended</h1>
+          {session?.name ? <p className="text-muted">{session.name}</p> : null}
           <div className="flex flex-wrap justify-center gap-3">
             <Button href={`/leaderboard?s=${code}`} size="lg">
-              View leaderboard
+              Leaderboard
             </Button>
             <Button href="/" variant="secondary" size="lg">
               Home
@@ -173,9 +193,11 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
   if (!hydrated || (loading && !session)) {
     return (
       <PageShell>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16" role="status">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16" role="status" aria-label="Loading">
           <PulsingTower />
-          <p className="font-pixel text-[0.625rem] text-muted uppercase">Finding tower {code}…</p>
+          <p className="font-pixel text-[0.625rem] text-muted" aria-hidden="true">
+            {code}
+          </p>
         </div>
       </PageShell>
     );
@@ -186,25 +208,18 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
     return (
       <PageShell>
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded border-2 border-ember/60 bg-ember/10 px-2 py-1 font-pixel text-[0.625rem] text-ember">
-              Joining session {code}
-            </span>
-            {session?.name && <span className="truncate text-sm text-muted">{session.name}</span>}
-          </div>
+          <span
+            className="self-start rounded border-2 border-ember/60 bg-ember/10 px-2 py-1 font-pixel text-[0.625rem] text-ember"
+            title={session?.name ?? undefined}
+          >
+            {code}
+          </span>
           <Panel className="flex flex-col gap-4">
-            <h1 className="font-pixel text-sm leading-relaxed text-text sm:text-base">
-              {editing ? "Change your hero" : "Create your hero"}
-            </h1>
-            <p className="text-sm text-muted">
-              {joiningLate
-                ? "The climb has already started. Pick a name and a hero, then jump straight in."
-                : "Pick a name and a hero. Everyone in the lobby will see them appear on the big screen."}
-            </p>
+            <h1 className="sr-only">{editing ? "Change your hero" : "Create your hero"}</h1>
             <CharacterCreator
               initial={player ?? undefined}
               sessionCode={code}
-              submitLabel={joiningLate ? "Start Climbing" : editing ? "Save hero" : "Enter the Lobby"}
+              submitLabel={editing ? "Save" : "Go"}
               onDone={(p) => {
                 setSavedPlayer(p);
                 setEditing(false);
@@ -226,57 +241,83 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
   const hero = getHero(player.heroId);
   const count = everyone.length;
   const showCountdown = status === "playing" && !lateArrival;
+  const leaving = status === "playing" && lateArrival;
+
+  if (webgl === null) return <FullLoader />;
+
+  if (use3D) {
+    return (
+      <div className="fixed inset-0 h-dvh w-full overflow-hidden overscroll-none bg-bg">
+        <SceneBoundary onError={() => setSceneFailed(true)} fallback={<FullLoader />}>
+          <Lobby3D
+            code={code}
+            player={player}
+            roster={everyone}
+            count={count}
+            connected={connected}
+            sessionName={session?.name ?? null}
+            countdown={showCountdown}
+            onCountdownDone={goPlay}
+            leaving={leaving}
+            isAdmin={isAdmin}
+            onChangeHero={() => {
+              // Once the climb has started, editing would unmount the countdown and stop goPlay firing.
+              if (status !== "playing") setEditing(true);
+            }}
+            onUse2D={() => setMode2d(true)}
+          />
+        </SceneBoundary>
+      </div>
+    );
+  }
 
   return (
     <PageShell>
       {showCountdown && <ClimbCountdown onDone={goPlay} />}
-      {status === "playing" && lateArrival && (
-        <p role="status" className="py-8 text-center font-pixel text-xs text-ember">
-          The climb has started. Heading in…
-        </p>
+      {leaving && (
+        <div role="status" aria-label="Starting" className="flex justify-center py-8">
+          <PulsingTower />
+        </div>
       )}
 
       {/* Inert while the countdown is up so no hidden control can take a key press and abort the start. */}
       <div className="flex flex-col gap-5" inert={showCountdown}>
-        {/* Session header */}
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-pixel text-[0.625rem] text-muted uppercase">Session</p>
-            <h1 className="truncate text-lg font-bold text-text sm:text-xl">{session?.name ?? "Tower Session"}</h1>
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="rounded border-2 border-line bg-surface-2 px-2 py-1 font-pixel text-sm text-gold"
+              aria-label={`Code ${code}`}
+            >
+              {code}
+            </span>
+            {session?.name && <h1 className="truncate text-base font-bold text-text">{session.name}</h1>}
           </div>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-muted" title={connected ? "Live" : "Connecting"}>
+            <span
+              className="flex items-center gap-1.5 font-pixel text-xs text-gold"
+              aria-label={`${count} ${count === 1 ? "hero" : "heroes"}`}
+              aria-live="polite"
+              title={connected ? "Live" : "Connecting"}
+            >
+              <span aria-hidden="true">👥</span>
+              <span aria-hidden="true">{count}</span>
               <span
                 aria-hidden="true"
                 className={`inline-block size-2 rounded-full ${connected ? "bg-good" : "animate-pulse bg-gold"}`}
               />
-              {connected ? "Live" : "Connecting…"}
             </span>
-            <span className="rounded border-2 border-line bg-surface-2 px-2 py-1 font-pixel text-xs text-gold">{code}</span>
+            <span role="status" aria-label="Waiting for start" title="Waiting" className="animate-pulse text-xl">
+              <span aria-hidden="true">⏳</span>
+            </span>
           </div>
         </header>
 
-        {/* Waiting banner */}
-        <Panel className="flex flex-col items-center gap-4 text-center">
+        <div className="flex justify-center py-2">
           <PulsingTower />
-          <p className="font-pixel text-[0.6875rem] leading-relaxed text-ember sm:text-sm" role="status">
-            Waiting for the admin to start the climb…
-          </p>
-          <p className="text-sm text-muted">Keep this screen open. Your climb begins on everyone&apos;s phone at the same moment.</p>
-        </Panel>
+        </div>
 
-        {/* You */}
-        <section aria-labelledby="you-heading" className="flex flex-col gap-2">
-          <h2 id="you-heading" className="font-pixel text-[0.625rem] text-muted uppercase">
-            You
-          </h2>
-          <HeroCard name={player.name} heroId={hero.id} subtitle={`You · ${hero.name}`} highlight />
-          <p className="text-sm text-muted">
-            <span className="font-semibold" style={{ color: hero.color }}>
-              Perk:
-            </span>{" "}
-            {hero.perk}
-          </p>
+        <section aria-label="You" className="flex flex-col gap-2">
+          <HeroCard name={player.name} heroId={hero.id} subtitle={hero.name} highlight />
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
@@ -286,32 +327,27 @@ export function LobbyRoom({ rawCode }: { rawCode: string }) {
                 if (status !== "playing") setEditing(true);
               }}
             >
-              Change hero
+              Hero
             </Button>
+            {webgl && (
+              <Button variant="secondary" onClick={() => setMode2d(false)} aria-label="3D mode">
+                3D
+              </Button>
+            )}
             <Button variant="ghost" href="/">
               Leave
             </Button>
             {isAdmin && (
               <Button variant="ghost" href={`/host/${code}`}>
-                Admin controls
+                Admin
               </Button>
             )}
           </div>
         </section>
 
-        {/* Everyone */}
-        <section aria-labelledby="heroes-heading" className="flex flex-col gap-3">
-          <h2 id="heroes-heading" className="flex items-baseline justify-between gap-2">
-            <span className="font-pixel text-[0.625rem] text-muted uppercase">Heroes in the lobby</span>
-            <span className="font-pixel text-xs text-gold" aria-live="polite">
-              {count} {count === 1 ? "hero" : "heroes"}
-            </span>
-          </h2>
+        <section aria-label="Heroes" className="flex flex-col gap-3">
           <LobbyPlayerGrid players={everyone} meId={player.id} />
-          {count <= 1 && <p className="text-sm text-muted">You&apos;re the first one here. Others will pop in as they join.</p>}
         </section>
-
-        <TipCarousel />
       </div>
     </PageShell>
   );

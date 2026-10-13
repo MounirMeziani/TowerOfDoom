@@ -7,7 +7,6 @@ import { savePlayer } from "@/lib/player";
 import type { Player } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { HeroAvatar } from "./HeroAvatar";
-import { HeroCard } from "./HeroCard";
 
 export interface CharacterCreatorProps {
   initial?: Partial<Player>;
@@ -23,19 +22,22 @@ const tileVariants = {
   picked: { y: [0, -9, 0, -3, 0], scale: [1, 1.12, 1, 1.04, 1], transition: { duration: 0.55 } },
 };
 
-/** Name + hero picker with a live preview card. Saves the player via savePlayer(). */
+/** "Ledger Knight" -> "Knight": one word fits a phone tile. */
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts[parts.length - 1] ?? name;
+}
+
+/** Name + hero picker with a live mini preview. Saves the player via savePlayer(). */
 export function CharacterCreator({ initial, sessionCode, submitLabel, onDone }: CharacterCreatorProps) {
   const [name, setName] = useState(initial?.name ?? "");
   const [heroId, setHeroId] = useState(getHero(initial?.heroId).id);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [diceSpins, setDiceSpins] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
-  const nameId = useId();
   const errorId = useId();
-  const hintId = useId();
-  const groupLabelId = useId();
   const radioName = useId();
   const hero = getHero(heroId);
   const trimmed = name.trim();
@@ -43,7 +45,7 @@ export function CharacterCreator({ initial, sessionCode, submitLabel, onDone }: 
   function handleNameChange(value: string) {
     const next = value.slice(0, MAX_NAME);
     setName(next);
-    if (error && next.trim().length > 0) setError(null);
+    if (error && next.trim().length > 0) setError(false);
   }
 
   function rollRandomHero() {
@@ -57,168 +59,145 @@ export function CharacterCreator({ initial, sessionCode, submitLabel, onDone }: 
     e.preventDefault();
     if (busy) return;
     if (trimmed.length < 1 || trimmed.length > MAX_NAME) {
-      setError(`Your hero needs a name (1-${MAX_NAME} characters).`);
+      setError(true);
       inputRef.current?.focus();
       return;
     }
-    setError(null);
+    setError(false);
     setBusy(true);
     const player = savePlayer({ id: initial?.id, name: trimmed, heroId, sessionCode });
     onDone(player);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-      {/* Name */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor={nameId} className="font-pixel text-[0.625rem] text-muted uppercase">
-            Hero name
-          </label>
-          <span
-            id={hintId}
-            className={`text-xs tabular-nums ${name.length >= MAX_NAME ? "text-gold" : "text-muted"}`}
-          >
-            {name.length}/{MAX_NAME}
-          </span>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      {/* Name + dice */}
+      <div className="flex items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={(e) => handleNameChange(e.target.value)}
+            maxLength={MAX_NAME}
+            autoComplete="nickname"
+            autoCapitalize="words"
+            enterKeyHint="go"
+            spellCheck={false}
+            placeholder="Name"
+            aria-label={`Hero name, 1 to ${MAX_NAME} characters`}
+            aria-invalid={error || undefined}
+            aria-describedby={error ? errorId : undefined}
+            className={`min-h-12 w-full rounded-md border-2 bg-surface-2 px-3 py-2 text-base text-text transition-colors placeholder:text-muted/70 focus-visible:border-ember ${
+              error ? "border-bad" : "border-line"
+            }`}
+          />
+          {error && (
+            <p id={errorId} role="alert" className="text-xs text-bad tabular-nums">
+              <span className="sr-only">Name needs </span>1-{MAX_NAME}
+              <span className="sr-only"> characters</span>
+            </p>
+          )}
         </div>
-        <input
-          ref={inputRef}
-          id={nameId}
-          type="text"
-          value={name}
-          onChange={(e) => handleNameChange(e.target.value)}
-          maxLength={MAX_NAME}
-          autoComplete="nickname"
-          autoCapitalize="words"
-          enterKeyHint="go"
-          spellCheck={false}
-          placeholder="e.g. Alex the Brave"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${errorId} ${hintId}` : hintId}
-          className={`min-h-12 w-full rounded-md border-2 bg-surface-2 px-3 py-2 text-base text-text transition-colors placeholder:text-muted/70 focus-visible:border-ember ${
-            error ? "border-bad" : "border-line"
-          }`}
-        />
-        {error && (
-          <p id={errorId} role="alert" className="flex items-center gap-2 text-sm text-bad">
-            <span aria-hidden="true">✗</span>
-            {error}
-          </p>
-        )}
+        <button
+          type="button"
+          onClick={rollRandomHero}
+          aria-label="Random hero"
+          title="Random hero"
+          className="grid size-12 shrink-0 place-items-center rounded-md border-2 border-line bg-surface-2 text-xl transition-colors hover:border-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
+        >
+          <motion.span
+            aria-hidden="true"
+            className="inline-block"
+            animate={reduceMotion ? undefined : { rotate: diceSpins * 360 }}
+            transition={{ type: "spring", stiffness: 260, damping: 16 }}
+          >
+            🎲
+          </motion.span>
+        </button>
       </div>
 
       {/* Hero picker: native radios give radiogroup semantics + arrow-key navigation */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <span id={groupLabelId} className="font-pixel text-[0.625rem] text-muted uppercase">
-            Choose your hero
-          </span>
-          <button
-            type="button"
-            onClick={rollRandomHero}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border-2 border-line bg-surface-2 px-3 text-sm font-semibold text-text transition-colors hover:border-gold hover:text-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
-          >
-            <motion.span
-              aria-hidden="true"
-              className="inline-block text-base"
-              animate={reduceMotion ? undefined : { rotate: diceSpins * 360 }}
-              transition={{ type: "spring", stiffness: 260, damping: 16 }}
+      <div role="radiogroup" aria-label="Hero" className="grid grid-cols-4 gap-2">
+        {HEROES.map((h) => {
+          const selected = h.id === heroId;
+          return (
+            <label
+              key={h.id}
+              title={h.name}
+              className={`relative flex min-h-20 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 p-1.5 text-center transition-[border-color,background-color,box-shadow] duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ember ${
+                selected ? "" : "border-line bg-surface hover:border-muted hover:bg-surface-2"
+              }`}
+              style={
+                selected
+                  ? {
+                      borderColor: h.color,
+                      backgroundColor: `color-mix(in oklab, ${h.color} 14%, #1f1233)`,
+                      boxShadow: `0 0 22px -6px ${h.color}, inset 0 0 0 1px color-mix(in oklab, ${h.color} 40%, transparent)`,
+                    }
+                  : undefined
+              }
             >
-              🎲
-            </motion.span>
-            Random hero
-          </button>
-        </div>
-
-        <div role="radiogroup" aria-labelledby={groupLabelId} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {HEROES.map((h) => {
-            const selected = h.id === heroId;
-            return (
-              <label
-                key={h.id}
-                className={`relative flex min-h-16 min-w-0 cursor-pointer items-center gap-1.5 rounded-md border-2 p-1.5 transition-[border-color,background-color,box-shadow] duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ember sm:flex-col sm:justify-start sm:gap-1.5 sm:p-2 sm:text-center ${
-                  selected ? "" : "border-line bg-surface hover:border-muted hover:bg-surface-2"
-                }`}
-                style={
-                  selected
-                    ? {
-                        borderColor: h.color,
-                        backgroundColor: `color-mix(in oklab, ${h.color} 14%, #1f1233)`,
-                        boxShadow: `0 0 22px -6px ${h.color}, inset 0 0 0 1px color-mix(in oklab, ${h.color} 40%, transparent)`,
-                      }
-                    : undefined
-                }
+              <input
+                type="radio"
+                name={radioName}
+                value={h.id}
+                checked={selected}
+                onChange={() => setHeroId(h.id)}
+                aria-label={h.name}
+                className="sr-only"
+              />
+              <motion.span
+                className="inline-flex shrink-0"
+                variants={tileVariants}
+                initial={false}
+                animate={selected && !reduceMotion ? "picked" : "idle"}
               >
-                <input
-                  type="radio"
-                  name={radioName}
-                  value={h.id}
-                  checked={selected}
-                  onChange={() => setHeroId(h.id)}
-                  className="sr-only"
-                />
-                <motion.span
-                  className="inline-flex shrink-0"
-                  variants={tileVariants}
-                  initial={false}
-                  animate={selected && !reduceMotion ? "picked" : "idle"}
-                >
-                  <HeroAvatar heroId={h.id} size="md" bob={selected} />
-                </motion.span>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span lang="en" className="text-xs leading-tight font-semibold hyphens-auto text-text">
-                    {h.name}
-                  </span>
-                  <span className="line-clamp-2 text-[0.6875rem] leading-snug text-muted">{h.title}</span>
-                </span>
-                {selected && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -top-2 -right-2 grid size-5 place-items-center rounded-sm border-2 border-bg text-[0.625rem] font-bold text-bg"
-                    style={{ backgroundColor: h.color }}
-                  >
-                    ✓
-                  </span>
-                )}
-              </label>
-            );
-          })}
-        </div>
-        <p className="sr-only" aria-live="polite">
-          {`${hero.name} selected. Perk: ${hero.perk}.`}
-        </p>
+                <HeroAvatar heroId={h.id} size="md" bob={selected} />
+              </motion.span>
+              <span aria-hidden="true" className="w-full truncate text-[0.6875rem] leading-tight font-semibold text-text">
+                {shortName(h.name)}
+              </span>
+            </label>
+          );
+        })}
       </div>
+      <p className="sr-only" aria-live="polite">
+        {`${hero.name} selected.`}
+      </p>
 
-      {/* Live preview */}
-      <div className="flex flex-col gap-2">
-        <span className="font-pixel text-[0.625rem] text-muted uppercase">Preview</span>
+      {/* Mini preview + submit */}
+      <div className="flex items-center gap-3">
         <motion.div
           key={hero.id}
           initial={reduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="flex flex-col gap-2"
+          aria-hidden="true"
+          className="flex min-w-0 flex-1 items-center gap-2"
         >
-          <HeroCard name={trimmed || "Your hero"} heroId={hero.id} subtitle={hero.title} highlight avatarSize="lg" />
-          <p className="flex items-start gap-2 text-sm text-muted">
-            <span aria-hidden="true" style={{ color: hero.color }}>
-              ★
-            </span>
-            <span>
-              <span className="font-semibold" style={{ color: hero.color }}>
-                Perk:
-              </span>{" "}
-              {hero.perk}
-            </span>
-          </p>
+          <HeroAvatar heroId={hero.id} size="md" />
+          <span className="truncate font-semibold" style={{ color: hero.color }}>
+            {trimmed || "?"}
+          </span>
         </motion.div>
+        <Button
+          type="submit"
+          size="lg"
+          className="min-w-32 shrink-0"
+          disabled={busy}
+          aria-busy={busy || undefined}
+        >
+          {busy ? (
+            <span role="img" aria-label="Loading" className="inline-block size-4 animate-spin rounded-full border-2 border-bg border-t-transparent" />
+          ) : (
+            <>
+              {submitLabel}
+              <span aria-hidden="true">▲</span>
+            </>
+          )}
+        </Button>
       </div>
-
-      <Button type="submit" size="lg" className="w-full" disabled={busy} aria-busy={busy || undefined}>
-        {busy ? "Opening the doors..." : submitLabel}
-        {!busy && <span aria-hidden="true">▲</span>}
-      </Button>
     </form>
   );
 }
